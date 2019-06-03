@@ -10,33 +10,22 @@
 #define PREFIX BASENAME ": "
 #define URL_GET_IPV4 "ipv4.icanhazip.com"
 
-
-static const char* ipv4_next_part(const char* c)
-{
-    if (c[0] >= '0' && c[0] <= '9') {
-        if (c[1] == '.') return c + 2;
-        if (c[1] >= '0' && c[1] <= '9') {
-            if (c[2] == '.') return c + 3;
-            if (c[2] >= '0' && c[2] <= '9') {
-                if (c[3] == '.') switch(c[0]) {
-                    case '0': case '1': return c + 4;
-                    case '2': if ((unsigned)(c[1] - '0') * 10 +
-                                  (unsigned)(c[2] - '0') < 56) return c + 4;
-                }
-            }
-        }
+static const char* pass_uint8_dec(const char *c) {
+    if (*c < '0' || *c > '9') return 0;
+    for (unsigned n = *c++ - '0'; ; ++c) {
+        if (*c < '0' || *c > '9') return c;
+        if ((n = n * 10 + *c - '0') > 255) return 0;
     }
-    return NULL;
 }
 
 static bool is_ipv4(const char *c)
 {
-    return (c = ipv4_next_part(c))
-        && (c = ipv4_next_part(c))
-        && (c = ipv4_next_part(c))
-        && (c = ipv4_next_part(c))
-        && *c == '\0';
+    return (c = pass_uint8_dec(c)) && *c == '.'
+        && (c = pass_uint8_dec(c + 1)) && *c == '.'
+        && (c = pass_uint8_dec(c + 1)) && *c == '.'
+        && (c = pass_uint8_dec(c + 1)) && *c == '\0';
 }
+
 
 /**
  * replace meaningless chars to '\0' and count real lines
