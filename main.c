@@ -10,33 +10,32 @@
 #define PREFIX BASENAME ": "
 #define URL_GET_IPV4 "ipv4.icanhazip.com"
 
-typedef struct {
-    unsigned start;
-    unsigned end;
-} range_t;
 
-
-static bool is_not_ipv4(const char *c)
+static const char* ipv4_next_part(const char* c)
 {
-    if (*c >= '0' && *c <= '9') ++c; else return true;
-    if (*c >= '0' && *c <= '9') ++c; else if (*c == '.') goto part2; else return true;
-    if (*c >= '0' && *c <= '9') ++c; else if (*c == '.') goto part2; else return true;
-    if (*c != '.') return true;
-    part2: ++c;
-    if (*c >= '0' && *c <= '9') ++c; else return true;
-    if (*c >= '0' && *c <= '9') ++c; else if (*c == '.') goto part3; else return true;
-    if (*c >= '0' && *c <= '9') ++c; else if (*c == '.') goto part3; else return true;
-    if (*c != '.') return true;
-    part3: ++c;
-    if (*c >= '0' && *c <= '9') ++c; else return true;
-    if (*c >= '0' && *c <= '9') ++c; else if (*c == '.') goto part4; else return true;
-    if (*c >= '0' && *c <= '9') ++c; else if (*c == '.') goto part4; else return true;
-    if (*c != '.') return true;
-    part4: ++c;
-    if (*c >= '0' && *c <= '9') ++c; else return true;
-    if (*c >= '0' && *c <= '9') ++c; else return *c != 0;
-    if (*c >= '0' && *c <= '9') ++c; else return *c != 0;
-    return *c != 0;
+    if (c[0] >= '0' && c[0] <= '9') {
+        if (c[1] == '.') return c + 2;
+        if (c[1] >= '0' && c[1] <= '9') {
+            if (c[2] == '.') return c + 3;
+            if (c[2] >= '0' && c[2] <= '9') {
+                if (c[3] == '.') switch(c[0]) {
+                    case '0': case '1': return c + 4;
+                    case '2': if ((unsigned)(c[1] - '0') * 10 +
+                                  (unsigned)(c[2] - '0') < 56) return c + 4;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+static bool is_ipv4(const char *c)
+{
+    return (c = ipv4_next_part(c))
+        && (c = ipv4_next_part(c))
+        && (c = ipv4_next_part(c))
+        && (c = ipv4_next_part(c))
+        && *c == '\0';
 }
 
 /**
@@ -256,7 +255,7 @@ static int cfddns_check ( const char **config )
 {
     char ipv4_now[IPV4_SIZE];
     cfddns_get_ipv4_now(ipv4_now);
-    if (is_not_ipv4(ipv4_now)) {
+    if (!is_ipv4(ipv4_now)) {
         fputs(PREFIX "get_ipv4_now: invalid address: ", stderr);
         fputs(ipv4_now, stderr);
         fputc('\n', stderr);
@@ -319,7 +318,7 @@ static int cfddns_check ( const char **config )
         fwrite(ipv4, 1, ipv4_len, stdout);
         char e = ipv4[ipv4_len];
         ipv4[ipv4_len] = '\0';
-        if (is_not_ipv4(ipv4)) {
+        if (!is_ipv4(ipv4)) {
             fputs(" not invalid", stdout);
         }
         ipv4[ipv4_len] = e;
