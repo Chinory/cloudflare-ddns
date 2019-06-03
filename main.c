@@ -87,39 +87,49 @@ static size_t cfddns_config_filter(char *c)
     }
 }
 
-static size_t cfddns_config_scan(const char **config)
+static size_t cfddns_config_scan(const char** config)
 {
-    const char *c = *config;
-    for (; ; *config = ++c) switch (*c) {
-        case '\0': return 0;
-        case '\n':
-        case ' ':
-        case '#': if (c != *config)
-            return c - *config;
+    const char* c = *config;
+    for (; ; *config = ++c) {
+        switch (*c) {
+            case '\0':
+                return 0;
+            case '\n':
+            case ' ':
+            case '#': {
+                if (c != *config) {
+                    return c - *config;
+                }
+            }
+        }
     }
 }
 
 
 
-static bool cfddns_config_next(const char **config)
+static bool cfddns_config_next(const char** config)
 {
-    const char *c = *config;
-    for (; ; *config = ++c) switch (*c) {
-        case '\0': return false;
-        case '\n':
-        case ' ': break;
-        case '#': {
-            for (++c; *c != '\n'; ++c) {
-                if (*c == '\0') {
-                    *config = c;
-                    return false;
+    const char* c = *config;
+    for (; ; *config = ++c) {
+        switch (*c) {
+            case '\0':
+                return false;
+            case '\n':
+            case ' ':
+                break;
+            case '#': {
+                for (++c; *c != '\n'; ++c) {
+                    if (*c == '\0') {
+                        *config = c;
+                        return false;
+                    }
                 }
+                break;
             }
-            break;
+            default:
+                return true;
         }
-        default: return true;
     }
-    
 }
 
 static size_t cfddns_write_zone_id( char *json, size_t char_size, size_t nmemb, const char **zone_id )
