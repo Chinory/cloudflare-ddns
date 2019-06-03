@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <curl/curl.h>
 #include <stdlib.h>
+#define UNUSED __attribute__((unused))
+
 #define IPV4_LEN 15
 #define IPV4_SIZE 16
 
@@ -10,7 +12,7 @@
 #define PREFIX BASENAME ": "
 #define URL_GET_IPV4 "ipv4.icanhazip.com"
 
-static const char* pass_uint8_dec(const char *c) {
+static const char* pass_uint8_dec (const char* c) {
     if (*c < '0' || *c > '9') return 0;
     for (unsigned n = *c++ - '0'; ; ++c) {
         if (*c < '0' || *c > '9') return c;
@@ -18,7 +20,7 @@ static const char* pass_uint8_dec(const char *c) {
     }
 }
 
-static bool is_ipv4(const char *c)
+static bool is_ipv4(const char* c)
 {
     return (c = pass_uint8_dec(c)) && *c == '.'
         && (c = pass_uint8_dec(c + 1)) && *c == '.'
@@ -26,7 +28,7 @@ static bool is_ipv4(const char *c)
         && (c = pass_uint8_dec(c + 1)) && *c == '\0';
 }
 
-static size_t cfddns_config_scan(const char** config)
+static size_t cfddns_config_scan (const char** config)
 {
     const char* c = *config;
     for (; ; *config = ++c) {
@@ -46,7 +48,7 @@ static size_t cfddns_config_scan(const char** config)
 
 
 
-static bool cfddns_config_next(const char** config)
+static bool cfddns_config_next (const char** config)
 {
     const char* c = *config;
     for (; ; *config = ++c) {
@@ -71,32 +73,27 @@ static bool cfddns_config_next(const char** config)
     }
 }
 
-static size_t cfddns_write_zone_id( char *json, size_t char_size, size_t nmemb, const char **zone_id )
+static size_t cfddns_write_zone_id (char* json, size_t UNUSED(char_size), size_t size, const char** zone_id_ref)
 {
-#define ZONE_ID_HEAD "{\"result\":[{\"id\":\""
-    if (nmemb > sizeof(ZONE_ID_HEAD)) {
-        if (memcmp(json, ZONE_ID_HEAD, sizeof(ZONE_ID_HEAD))) {
-            char *start = json + sizeof(ZONE_ID_HEAD);
-            for (char *i = start; *i; ++i) {
-                if (*i == '"') {
-                    char *zone_id_str = malloc(i - start + 1);
-                    if (zone_id_str) {
-                        memcpy(zone_id_str, start, i - start);
-                        *zone_id = zone_id_str;
-                        return nmemb;
-                    }
-                }
-            }
-        }
+#define ZONE_ID_RESULT_HEAD "{\"result\":[{\"id\":\""
+    if (size <= sizeof(ZONE_ID_RESULT_HEAD)) return 0;
+    if (!memcmp(json, ZONE_ID_RESULT_HEAD, sizeof(ZONE_ID_RESULT_HEAD))) return 0;
+    char* start = json + sizeof(ZONE_ID_RESULT_HEAD);
+    for (char *i = start; ; ++i) {
+        if (!*i) return 0; else if (*i != '"') continue;
+        char* zone_id_new = malloc(i - start + 1);
+        if (!zone_id_new) return 0;
+        if (*zone_id_ref) free(*zone_id_ref);
+        memcpy(zone_id_new, start, i - start);
+        *zone_id_ref = zone_id_new;
+        return size;
     }
-    return 0;
 }
 
 static char* cfddns_get_zone_id (char *zone_name, char* email, char* api_key, size_t zone_name_len, size_t email_len, size_t api_key_len)
 {
     CURL *req = curl_easy_init();
     if (!req) return NULL;
-
 #define URL_GET_ZONE_ID "https://api.cloudflare.com/client/v4/zones?name="
     const size_t url_size = sizeof(URL_GET_ZONE_ID) + zone_name_len + 1;
     char url[url_size];
