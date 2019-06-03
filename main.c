@@ -26,67 +26,6 @@ static bool is_ipv4(const char *c)
         && (c = pass_uint8_dec(c + 1)) && *c == '\0';
 }
 
-
-/**
- * replace meaningless chars to '\0' and count real lines
- * @param c string to modify and count lines
- * @return number of real lines
- */
-static size_t cfddns_config_filter(char *c)
-{
-    size_t lines = 0;
-    char quote = '\0';
-    for (; ; ++c) {
-        if (*c == '\0') return lines;
-        if (*c == ' ') {
-            do *c++ = '\0'; while (*c == ' ');
-            if (*c == '\0') return lines;
-        }
-        if (*c == '\n') {
-            *c = '\0'; quote = '\0';
-            continue;
-        }
-        if (*c == '#') {
-            do { *c++ = '\0';
-                if (*c == '\0') return lines;
-            } while (*c != '\n');
-            *c = '\0';
-            continue;
-        }
-        ++lines;
-        if (*c == '"' || *c == '\'') {
-            quote = *c;
-        }
-        for (++c; ; ++c) {
-            if (*c == '\0') {
-                for (char *e = c - 1; *e == ' '; *e-- = '\0');
-                return lines;
-            }
-            if (*c == '\n') {
-                *c = '\0'; quote = '\0';
-                for (char *e = c - 1; *e == ' '; *e-- = '\0');
-                break;
-            }
-            if (quote) {
-                if (*c == quote && c[-1] != '\\') quote = '\0';
-                continue;
-            }
-            if (*c == '"' || *c == '\'') {
-                quote = *c;
-                continue;
-            }
-            if (*c == '#') {
-                for (char *e = c - 1; *e == ' '; *e-- = '\0');
-                do { *c++ = '\0';
-                    if (*c == '\0') return lines;
-                } while (*c != '\n');
-                *c = '\0';
-                break;
-            }
-        }
-    }
-}
-
 static size_t cfddns_config_scan(const char** config)
 {
     const char* c = *config;
@@ -218,12 +157,13 @@ static void cfddns_update (char *domain, char *ipv4, char *zoneid, char *recordi
 
 static void cfddns_get_ipv4_now(char *ipv4)
 {
-    CURL *req = curl_easy_init();
-    curl_easy_setopt(req, CURLOPT_URL, URL_GET_IPV4);
-    curl_easy_setopt(req, CURLOPT_WRITEFUNCTION, cfddns_write_ipv4);
-    curl_easy_setopt(req, CURLOPT_WRITEDATA, ipv4);
-    curl_easy_perform(req);
-    curl_easy_cleanup(req);
+//    CURL *req = curl_easy_init();
+//    curl_easy_setopt(req, CURLOPT_URL, URL_GET_IPV4);
+//    curl_easy_setopt(req, CURLOPT_WRITEFUNCTION, cfddns_write_ipv4);
+//    curl_easy_setopt(req, CURLOPT_WRITEDATA, ipv4);
+//    curl_easy_perform(req);
+//    curl_easy_cleanup(req);
+    strcpy(ipv4, "127.0.0.1");
 }
 
 static int cfddns_check ( const char **config )
