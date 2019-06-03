@@ -43,9 +43,9 @@ static bool is_ipv4(const char *c)
  * @param c string to modify and count lines
  * @return number of real lines
  */
-static unsigned cfddns_config_filter(char *c)
+static size_t cfddns_config_filter(char *c)
 {
-    unsigned lines = 0;
+    size_t lines = 0;
     char quote = '\0';
     for (; ; ++c) {
         if (*c == '\0') return lines;
@@ -98,28 +98,15 @@ static unsigned cfddns_config_filter(char *c)
     }
 }
 
-static unsigned cfddns_config_scan(const char **config)
+static size_t cfddns_config_scan(const char **config)
 {
     const char *c = *config;
-    switch (*c) {
-        case '\0':
+    for (; ; *config = ++c) switch (*c) {
+        case '\0': return 0;
         case '\n':
-        case ' ': {
-            unsigned len = c - *config;
-            if (len) return len; else break;
-        }
-        case '\'':
-        case '"': {
-            char quote = *c;
-            for (++c; ; ++c;) {
-                // err when \0 \n
-                if (*c == '\0' || *c == '\n' || (*c == quote && c[-1] != '\\')) {
-                    unsigned len = c - *config;
-                    if (len) return len; else break;
-                }
-            }
-            break;
-        }
+        case ' ':
+        case '#': if (c != *config)
+            return c - *config;
     }
 }
 
@@ -128,33 +115,22 @@ static unsigned cfddns_config_scan(const char **config)
 static bool cfddns_config_next(const char **config)
 {
     const char *c = *config;
-    for (; ; ++c) {
-        switch (*c) {
-            case '\0': {
-                *config = c;
-                return false;
-            }
-            case ' ': {
-                break;
-            }
-            case '#': {
-                for (++c; ; ++c) {
-                    if (*c == '\0') {
-                        *config = c;
-                        return false;
-                    }
-                    if (*c == '\n') {
-                        break;
-                    }
+    for (; ; *config = ++c) switch (*c) {
+        case '\0': return false;
+        case '\n':
+        case ' ': break;
+        case '#': {
+            for (++c; *c != '\n'; ++c) {
+                if (*c == '\0') {
+                    *config = c;
+                    return false;
                 }
-                break;
             }
-            default: {
-                *config = c;
-                return true;
-            }
+            break;
         }
+        default: return true;
     }
+    
 }
 
 static size_t cfddns_write_zone_id( char *json, size_t char_size, size_t nmemb, const char **zone_id )
@@ -178,7 +154,7 @@ static size_t cfddns_write_zone_id( char *json, size_t char_size, size_t nmemb, 
     return 0;
 }
 
-static char* cfddns_get_zone_id (char *zone_name, char* email, char* api_key, unsigned zone_name_len, unsigned email_len, unsigned api_key_len)
+static char* cfddns_get_zone_id (char *zone_name, char* email, char* api_key, size_t zone_name_len, size_t email_len, size_t api_key_len)
 {
     CURL *req = curl_easy_init();
     if (!req) return NULL;
@@ -231,7 +207,7 @@ static size_t cfddns_write_ipv4( char *ptr, size_t size, size_t nmemb, char *ipv
     return nmemb;
 }
 
-static int cfddns_update (char *domain, char *ipv4, char *zoneid, char *recordid)
+static void cfddns_update (char *domain, char *ipv4, char *zoneid, char *recordid)
 {
     CURL *req = curl_easy_init();
     curl_easy_setopt(req, CURLOPT_URL, "https://api.cloudflare.com/client/v4/zones?name=$zone_name");
@@ -267,7 +243,7 @@ static int cfddns_check ( const char **config )
     }
     while (cfddns_config_next(config)) {
         // email
-        unsigned email_len = cfddns_config_scan(config);
+        size_t email_len = cfddns_config_scan(config);
         if (!email_len) continue;
         const char *email = *config;
         *config += email_len;
@@ -277,7 +253,7 @@ static int cfddns_check ( const char **config )
         fputc('\n', stdout);
 
         // api_key
-        unsigned api_key_len = cfddns_config_scan(config);
+        size_t api_key_len = cfddns_config_scan(config);
         if (!api_key_len) continue;
         const char *api_key = *config;
         *config += api_key_len;
@@ -287,7 +263,7 @@ static int cfddns_check ( const char **config )
         fputc('\n', stdout);
 
         // zone_name
-        unsigned zone_name_len = cfddns_config_scan(config);
+        size_t zone_name_len = cfddns_config_scan(config);
         if (!zone_name_len) continue;
         const char *zone_name = *config;
         *config += zone_name_len;
@@ -297,7 +273,7 @@ static int cfddns_check ( const char **config )
         fputc('\n', stdout);
 
         // domain
-        unsigned domain_len = cfddns_config_scan(config);
+        size_t domain_len = cfddns_config_scan(config);
         if (!domain_len) continue;
         const char *domain = *config;
         *config += domain_len;
@@ -307,7 +283,7 @@ static int cfddns_check ( const char **config )
         fputc('\n', stdout);
 
         // ipv4: optional
-        unsigned ipv4_len = cfddns_config_scan(config);
+        size_t ipv4_len = cfddns_config_scan(config);
         char ipv4[IPV4_LEN];
         if (ipv4_len > IPV4_LEN) ipv4_len = IPV4_LEN;
         memcpy(ipv4, *config, ipv4_len);
@@ -326,7 +302,7 @@ static int cfddns_check ( const char **config )
         fputc('\n', stdout);
 
         // zone_id: optional
-        unsigned zone_id_len = cfddns_config_scan(config);
+        size_t zone_id_len = cfddns_config_scan(config);
         const char *zone_id = zone_id_len ? *config : "";
         *config += zone_id_len;
         // zone_id: log
@@ -335,7 +311,7 @@ static int cfddns_check ( const char **config )
         fputc('\n', stdout);
 
         // record_id: optional
-        unsigned record_id_len = cfddns_config_scan(config);
+        size_t record_id_len = cfddns_config_scan(config);
         const char *record_id = record_id_len ? *config : "";
         *config += record_id_len;
         // record_id: log
@@ -343,12 +319,13 @@ static int cfddns_check ( const char **config )
         fwrite(record_id, 1, record_id_len, stdout);
         fputc('\n', stdout);
     }
+    return 0;
 }
 
 int main (int argc, char *argv[])
 {
     if (argc < 2) {
-        fputs(BASENAME "[config_file]", stderr);
+        fputs(BASENAME " [config_file]", stderr);
         return 1;
     }
     // open config file
