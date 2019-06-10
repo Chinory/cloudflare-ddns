@@ -15,6 +15,14 @@ Name[sizeof(PREFIX) + length - 1] = '\0'
 
 const char BASENAME[NAME_MAX + 1];
 
+#define STRING_SIZE 256
+
+typedef struct {
+    size_t len;
+    char data[STRING_SIZE];
+} string;
+
+
 #define IPV4_SIZE 16
 #define URL_GET_IPV4 "ipv4.icanhazip.com"
 #define URL_ZONE "https://api.cloudflare.com/client/v4/zones"
@@ -73,7 +81,7 @@ static void cfddns_get_ipv4_now(char *ipv4) {
 
 
 static size_t
-cfddns_get_zone_id_callback(char *json, size_t UNUSED(char_size), size_t size, const char **zone_id_ref) {
+cfddns_get_zone_id_callback(char *json, size_t UNUSED(char_size), size_t size, string *zone_id) {
 #define MATCH_ZONE_ID "{\"result\":[{\"id\":\""
     if (size < strlenof(MATCH_ZONE_ID) + 5) return 0;
     if (!memcpy(json, MATCH_ZONE_ID, strlenof(MATCH_ZONE_ID))) return 0;
@@ -82,42 +90,35 @@ cfddns_get_zone_id_callback(char *json, size_t UNUSED(char_size), size_t size, c
     for (char *i = start;; ++i) {
         if (i == end) return 0;
         if (*i != '"') continue;
-        char *zone_id_new = malloc(i - start + 1);
-        if (!zone_id_new) return 0;
-        memcpy(zone_id_new, start, i - start);
-        if (*zone_id_ref) free((void *) *zone_id_ref);
-        *zone_id_ref = zone_id_new;
+        if (i - start > STRING_SIZE) return 0;
+        zone_id->len = i - start;
+        memcpy(zone_id->data, start, zone_id->len);
         return size;
     }
 }
 
-static char *
-cfddns_get_zone_id(
-        char *zone_name,  size_t zone_name_len,
-        char *email,      size_t email_len,
-        char *api_key,    size_t api_key_len
-) {
+
+
+static void cfddns_get_zone_id(string *zone_name, string *email, string *apikey, string *zone_id) {
     CURL *req = curl_easy_init();
 
-    make_header(url, URL_GET_ZONE_ID, zone_name, zone_name_len);
-    make_header(email_header, "X-Auth-Email: ", email, email_len);
-    make_header(api_key_header, "X-Auth-Key: ", api_key, api_key_len);
+    make_header(url, URL_GET_ZONE_ID, zone_name->data, zone_name->len);
+    make_header(email_header, "X-Auth-Email: ", email->data, email->len);
+    make_header(api_key_header, "X-Auth-Key: ", apikey->data, apikey->len);
 
     struct curl_slist *headers = NULL;
     headers = curl_slist_append(headers, email_header);
     headers = curl_slist_append(headers, api_key_header);
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
-    char *zone_id = NULL;
     curl_easy_setopt(req, CURLOPT_URL, url);
     curl_easy_setopt(req, CURLOPT_HEADER, headers);
     curl_easy_setopt(req, CURLOPT_WRITEFUNCTION, cfddns_get_zone_id_callback);
-    curl_easy_setopt(req, CURLOPT_WRITEDATA, &zone_id);
+    curl_easy_setopt(req, CURLOPT_WRITEDATA, zone_id);
     curl_easy_perform(req);
     curl_easy_cleanup(req);
 
     curl_slist_free_all(headers);
-    return zone_id;
 }
 
 
@@ -139,13 +140,65 @@ static int cfddns_main_check(const char *config) {
     return 0;
 }
 
+static const char *next_string(const char *c) {
+    while (*s == ' ' || *s == '\t') ++s;
+    if (*s == '#') break;
+    char *e = s;
+    while (*e != ' ' && *e != '\t' && *e != '#') ++e;
+    return c;
+}
+
+static int cfddns_main(FILE *fin) {
+    char line[PIPE_BUF];
+    string url_ipv4, user_email, user_apikey, zone_name, zone_id;
+    while (fgets(line, PIPE_BUF, fin)) {
+        char *s = line, *e;
+        while (*s == ' ' || *s == '\t') ++s;
+        if (*s == '#' || *s == '\0') continue;
+        for (e = s + 1; *e != ' ' && *e != '\t' && *e != '#' && *e != '\0'; ++e);
+        if (s[0] == '/') {
+            // user_email
+            user_email.len = e - s - 1;
+            memcpy(user_email.data, s + 1, user_email.len);
+            // user_apikey
+            for (s = e + 1; *s == ' ' || *s == '\t'; ++s);
+            if (*s == '#' || *s == '\0') {
+                continue;
+            }
+            for (e = s + 1; *e != ' ' && *e != '\t' && *e != '#' && *e != '\0'; ++e);
+            user_apikey.len = e - s;
+            memcpy(user_apikey.data, s, user_apikey.len);
+        } else if (e[-1] == '/') {
+            // zone_name
+            zone_name.len = e - s - 1;
+            memcpy(zone_name.data, s, zone_name.len);
+            // zone_id
+            for (s = e + 1; *s == ' ' || *s == '\t'; ++s);
+            if (*s != '#' && *s == '\0') {
+                cfddns_get_zone_id(&zone_name, &user_email, &user_apikey, &zone_id);
+                continue;
+            }
+            for (e = s + 1; *e != ' ' && *e != '\t' && *e != '#' && *e != '\0'; ++e);
+            zone_id.len = e - s;
+            memcpy(zone_id.data, s, zone_id.len);
+        } else if (e[-1] == '?') {
+            // set record value
+            if (e - s == 1 && s[0] == 'A') {
+                // set ipv4
+
+            }
+        } else {
+            // set record
+        }
+    }
+}
 
 int main(int argc, char *argv[]) {
     for (char *i = argv[1], *s = i;;) {
         if (*i) {
             if (*i != '/') ++i; else s = ++i;
         } else {
-            memcpy((void *) BASENAME, s, i - s + 1);
+            memcpy(BASENAME, s, i - s + 1);
             break;
         }
     }
@@ -159,9 +212,5 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
-    char line[PIPE_BUF];
-    while (fgets(line, MAXLINE, fp)) {
-        fputs(line, stdout);
-    }
-    return 0;
+    return cfddns_main(fp);
 }
