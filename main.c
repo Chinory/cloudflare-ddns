@@ -202,39 +202,47 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
         fwrite(e, 1, s - e, fout);
         if (!*s) { 
             fputc('\n', fout);
-            // empty line
             continue;
         }
         for (e = s + 1; *e && !is_space(*e) && !is_comment(*e); ++e);
         // got first token
         if (e[-1] == '?') { // var
-            // var_key
+            // read var_key
             string_slice var_key = {s, e - 1};
             fwrite(s, 1, e - s, fout);
-            // var_url
+            // read var_url
             for (s = e; is_space(*s); ++s);
             if (is_comment(*s)) for (++s; *s; ++s);
             fwrite(e, 1, s - e, fout);
             if (!*s) { 
-                fputs("# need url", ferr);
+                fputs(" #need_url", ferr);
                 fputc('\n', fout);
                 continue;
             }
-            // var_value_now
+            // curl var_value_now
             string_alloc_from(var_url, s, e);
             string_alloc_empty(var_value_now);
             cfddns_curl_get(string_cstr(&var_url), &var_value_now);
-            // var_value_last
+            // read var_value_last
             for (s = e; is_space(*s); ++s);
             if (*s && !is_comment(*s)) {
                 for (e = s + 1; *e && !is_space(*e) && !is_comment(*e); ++e);
                 if (string_compare_to(&var_value_now, s, e)) {
-                    // no need to update this var
+                    // write var_value_last
+                    fwrite(s, 1, e - s, fout);
+                    // write <tail>
                     for (s = e; *s; ++s);
                     fwrite(e, 1, s - e, fout);
+                    fputc('\n', fout);
                     continue;
                 }
             }
+            // write var_value_now
+            fwrite(var_value_now.data, 1, var_value_now.len, fout);
+            // write <tail>
+            for (s = e; *s; ++s);
+            fwrite(e, 1, s - e, fout);
+            fputc('\n', fout);
             // vars
             kvnode *var = malloc(sizeof(kvnode));
             string_write(&var->key, var_key.start, var_key.end);
@@ -259,12 +267,12 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
             // zone_id
             string_clear(&zone_id);
             for (s = e; is_space(*s); ++s);
-            if (is_comment(*s) || *s == '\0') {
+            if (!*s || is_comment(*s)) {
                 cfddns_get_zone_id(&user_email, &user_apikey, &zone_name, &zone_id);
-            } else {
-                for (e = s + 1; *e && !is_space(*e) && !is_comment(*e); ++e);
-                string_write(&zone_id, s, e);
+                continue;
             }
+            for (e = s + 1; *e && !is_space(*e) && !is_comment(*e); ++e);
+            string_write(&zone_id, s, e);
         } else { // record
             // required params
             if (!user_email.len) continue;
