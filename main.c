@@ -15,40 +15,35 @@ Name[sizeof(PREFIX) + length - 1] = '\0'
 
 char BASENAME[NAME_MAX + 1];
 
-#define is_space(c) ((c) == ' ' || (c) == '\t')
-#define is_comment(c) ((c) == '#')
 
-#define STRING_SIZE 255
-
+#define MAXSTR 253
 typedef struct string {
-    char data[STRING_SIZE];
     unsigned char len;
+    char data[MAXSTR + 1];
 } string;
 
-typedef struct string_slice {
-    char *start;
-    char *end;
-} string_slice;
+typedef struct padstring {
+    unsigned char len;
+    unsigned char pad;
+    char data[MAXSTR + 1];
+} padstring;
+
 
 static bool string_compare(const string *x, const string *y) {
-    return x->len != y->len ? false : memcmp(x->data, y->data, x->len);
+    return x->len == y->len && memcmp(x->data, y->data, x->len);
 }
 
-static bool string_compare_to(const string *str, const char *s, const char *e) {
-    return str->len == e - s && memcmp(str->data, s, e - s);
+static bool string_compare_to(const string *str, const char *start, const char *end) {
+    return str->len == end - start && memcmp(str->data, start, str->len);
 }
 
 static void string_copy(string *dst, const string *src) {
-    memcpy(dst->data, src->data, dst->len = src->len);
+    memcpy(dst, src, src->len + 1);
 }
 
-static void string_write(string *str, const char *s, const char *e) {
-    memcpy(str->data, s, str->len = e - s);
+static void string_copy_from(string *dst, const char *start, const char *end) {
+    memcpy(dst->data, start, dst->len = end - start);
 }
-
-#define string_alloc_empty(var) string var; var.len = 0
-
-#define string_alloc_from(var, s, e) string var; string_write(&var, s, e)
 
 static char *string_cstr(string *str) {
     str->data[str->len] = '\0';
@@ -59,11 +54,7 @@ static void string_clear(string *str) {
     str->len = 0;
 }
 
-typedef struct kvnode {
-    struct kvnode *prev;
-    struct string key;
-    struct string value;
-} kvnode;
+
 
 
 #define IPV4_SIZE 16
@@ -104,15 +95,15 @@ static const char *pass_ipv4(const char *c) {
 }
 
 static size_t cfddns_curl_get_callback(const char *src, const size_t UNUSED(char_size), const size_t len, string *dst) {
-    if (dst->len < STRING_SIZE) {
+    if (dst->len < MAXSTR) {
         const char *end = src + len;
         for (const char *s = src; s < end; ++s) {
             if (*s == '\0' || *s == '\n' || *s == ' ') continue;
             const char *e = s + 1;
             while (e < end && !(*e == '\0' || *e == '\n' || *e == ' ')) ++e;
             size_t n = e - s;
-            if (n > STRING_SIZE - dst->len)
-                n = STRING_SIZE - dst->len;
+            if (n > MAXSTR - dst->len)
+                n = MAXSTR - dst->len;
             memcpy(dst->data + dst->len, s, n);
             dst->len += n;
             break;
@@ -142,7 +133,7 @@ cfddns_get_zone_id_callback(char *json, size_t UNUSED(char_size), size_t size, s
     for (char *i = start;; ++i) {
         if (i == end) return 0;
         if (*i != '"') continue;
-        if (i - start > STRING_SIZE) return 0;
+        if (i - start > MAXSTR) return 0;
         memcpy(zone_id->data, start, zone_id->len = i - start);
         return size;
     }
@@ -188,105 +179,30 @@ static char *cfddns_find_end(char *i) {
     return i;
 }
 
-static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
-    char line[PIPE_BUF];
-    string_alloc_empty(user_email);
-    string_alloc_empty(user_apikey);
-    string_alloc_empty(zone_name);
-    string_alloc_empty(zone_id);
-    kvnode *vars = NULL;
-    while (fgets(line, PIPE_BUF, fin)) {
-        char *s, *e = line;
-        for (s = e; is_space(*s); ++s);
-        if (is_comment(*s)) for (++s; *s; ++s);
-        fwrite(e, 1, s - e, fout);
-        if (!*s) { 
-            fputc('\n', fout);
-            continue;
-        }
-        for (e = s + 1; *e && !is_space(*e) && !is_comment(*e); ++e);
-        // got first token
-        if (e[-1] == '?') { // var
-            // read var_key
-            string_slice var_key = {s, e - 1};
-            fwrite(s, 1, e - s, fout);
-            // read var_url
-            for (s = e; is_space(*s); ++s);
-            if (is_comment(*s)) for (++s; *s; ++s);
-            fwrite(e, 1, s - e, fout);
-            if (!*s) { 
-                fputs(" #need_url", ferr);
-                fputc('\n', fout);
-                continue;
-            }
-            // curl var_value_now
-            string_alloc_from(var_url, s, e);
-            string_alloc_empty(var_value_now);
-            cfddns_curl_get(string_cstr(&var_url), &var_value_now);
-            // read var_value_last
-            for (s = e; is_space(*s); ++s);
-            if (*s && !is_comment(*s)) {
-                for (e = s + 1; *e && !is_space(*e) && !is_comment(*e); ++e);
-                if (string_compare_to(&var_value_now, s, e)) {
-                    // write var_value_last
-                    fwrite(s, 1, e - s, fout);
-                    // write <tail>
-                    for (s = e; *s; ++s);
-                    fwrite(e, 1, s - e, fout);
-                    fputc('\n', fout);
-                    continue;
-                }
-            }
-            // write var_value_now
-            fwrite(var_value_now.data, 1, var_value_now.len, fout);
-            // write <tail>
-            for (s = e; *s; ++s);
-            fwrite(e, 1, s - e, fout);
-            fputc('\n', fout);
-            // vars
-            kvnode *var = malloc(sizeof(kvnode));
-            string_write(&var->key, var_key.start, var_key.end);
-            string_copy(&var->value, &var_value_now);
-            var->prev = vars; vars = var;
-        } else if (s[0] == '/') { // user
-            // user_email
-            string_write(&user_email, s + 1, e);
-            // user_apikey
-            string_clear(&user_apikey);
-            for (s = e; is_space(*s); ++s);
-            if (!*s || is_comment(*s)) {
-                fputs(" # need apikey", ferr);
-                fputc('\n', fout);
-                continue;
-            }
-            for (e = s + 1; *e && !is_space(*e) && !is_comment(*e); ++e);
-            string_write(&user_apikey, s, e);
-        } else if (e[-1] == '/') { // zone
-            // zone_name
-            string_write(&zone_name, s, e - 1);
-            // zone_id
-            string_clear(&zone_id);
-            for (s = e; is_space(*s); ++s);
-            if (!*s || is_comment(*s)) {
-                cfddns_get_zone_id(&user_email, &user_apikey, &zone_name, &zone_id);
-                continue;
-            }
-            for (e = s + 1; *e && !is_space(*e) && !is_comment(*e); ++e);
-            string_write(&zone_id, s, e);
-        } else { // record
-            // required params
-            if (!user_email.len) continue;
-            if (!user_apikey.len) continue;
-            if (!zone_id.len) continue;
-            // is this record need to update
-            kvnode *var = vars;
-            while (var && string_compare_to(&var->key, s, e)) var = var->prev;
-            if (!var) continue;
-            
+typedef struct varible {
+    struct varible *prev;
+    struct string key;
+    struct string value;
+    bool changed;
+} varible;
 
-        }
+
+
+static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
+    padstring str[5];
+    char line[sizeof(str)];
+
+
+    string user_email = {0};
+    string user_apikey = {0};
+    string zone_name = {0};
+    string zone_id = {0};
+    varible *vars = NULL;
+    while (fgets(line, sizeof(line), fin)) {
+
+        
     }
-    for (kvnode *var = vars; var; var = var->prev) free(var);
+    for (varible *var = vars; var; var = var->prev) free(var);
     return 0;
 }
 
