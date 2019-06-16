@@ -10,11 +10,10 @@
 #define HEAD_APIKEY "X-Auth-Key: "
 #define JSON_RESULT_HEAD_OF_GET_ZONE_ID "{\"result\":[{\"id\":\""
 
-static char *pass_space(char *i) {
-    while (*i == ' ') ++i;
-    if (*i == '#') for (++i; *i; ++i);
-    return i;
-}
+#define STR_MAX 254 // max=254
+#define URL_MAX 2048
+#define JSON_MAX 2048
+#define LINE_MAX PIPE_BUF
 
 static bool is_value(char c) {
     return c && c != ' ' && c != '#';
@@ -25,9 +24,15 @@ static char *pass_value(char *i) {
     return i;
 }
 
+static char *pass_space(char *i) {
+    while (*i == ' ') ++i;
+    if (*i == '#') for (++i; *i; ++i);
+    return i;
+}
+
 #define UNUSED __attribute__((unused))
 #define STRLEN(STR) (sizeof(STR) - 1)
-#define STARTS_WITH(STR, str, len) (len < sizeof(STR) && memcmp(STR, str, len))
+#define STARTS_WITH(STR, str, len) (len < STRLEN(STR) && memcmp(STR, str, len))
 
 static size_t fputss(const char *start, const char *end, FILE *file) {
     return fwrite(start, sizeof(char), end - start, file);
@@ -37,16 +42,6 @@ static size_t fputss(const char *start, const char *end, FILE *file) {
 #define strcat_char(var, c) var[var##_len++] = c;
 #define strcat_string(var, str) memcpy(var + var##_len, str.data, str.len); var##_len += str.len
 
-// #define declare_header(Identifier, HEAD, str) \
-// char Identifier[STRLEN(HEAD) + str.len + 1]; \
-// memcpy(Identifier, HEAD, STRLEN(HEAD)); \
-// memcpy(Identifier + STRLEN(HEAD), str.data, str.len); \
-// Identifier[STRLEN(HEAD) + str.len] = '\0'
-
-#define STR_MAX 254 // max=254
-#define URL_MAX 2048
-#define JSON_MAX 2048
-#define LINE_MAX PIPE_BUF
 char BASENAME[NAME_MAX + 1];
 
 // static const char *pass_ipv4_init_part(const char *c) {
@@ -170,6 +165,7 @@ curl_get_zone_id_callback(
 static void string_curl(string *str, const char *url) {
     string_clear(*str);
     CURL *curl = curl_easy_init();
+    if (!curl) return;
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_get_string_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, str);
