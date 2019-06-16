@@ -13,10 +13,17 @@
 #define STR_MAX 254 // max=254
 #define URL_MAX 2048
 #define JSON_MAX 2048
-#define LINE_MAX PIPE_BUF
 
 static bool is_value(char c) {
-    return c && c != ' ' && c != '#';
+    return c && c != '\n' && c != ' ' && c != '\t' && c != '#';
+}
+
+static bool is_end(char c) {
+    return c == '\0' || c == '\n';
+}
+
+static bool is_space(char c) {
+    return c == ' ' || c == '\t';
 }
 
 static char *pass_value(char *i) {
@@ -25,8 +32,13 @@ static char *pass_value(char *i) {
 }
 
 static char *pass_space(char *i) {
-    while (*i == ' ') ++i;
-    if (*i == '#') for (++i; *i; ++i);
+    while (is_space(*i)) ++i;
+//    if (*i == '#') for (++i; !is_end(*i); ++i);
+    return i;
+}
+
+static char *pass_line(char *i) {
+    while (!is_end(*i)) ++i;
     return i;
 }
 
@@ -150,11 +162,11 @@ curl_get_zone_id_callback(
         string *zone_id
 ) {
     if (STARTS_WITH(JSON_RESULT_HEAD_OF_GET_ZONE_ID, json, size)) {
-        char *start = json + STRLEN(JSON_RESULT_HEAD_OF_GET_ZONE_ID);
-        char *end = json + (size < STR_MAX ? size : STR_MAX);
-        for (char *i = start; i < end; ++i) {
+        const char *const start = json + STRLEN(JSON_RESULT_HEAD_OF_GET_ZONE_ID);
+        const char *const end = json + (size < STR_MAX ? size : STR_MAX);
+        for (const char *i = start; i < end; ++i) {
             if (*i == '"') {
-                string_copy(&zone_id, start, i);
+                string_copy(zone_id, start, i);
                 return size;
             }
         }
@@ -272,14 +284,19 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
     for (char line[LINE_MAX]; fgets(line, LINE_MAX, fin); fputc('\n', fout)) {
         char *s, *e = line;
         fputss(e, s = pass_space(e), fout);
-        if (s == (e = pass_value(s))) continue;
+        if (s == (e = pass_value(s))) {
+            fputss(e, pass_line(e), fout);
+            continue;
+        }
         switch (e[-1]) {
             case '?': {
                 struct variable *var = malloc(sizeof(struct variable));
                 if (!var) {
                     fputss(s, e, fout);
-                    fputs(e, fout);
+                    fputss(e, pass_line(e), fout);
+                    fflush(fout);
                     fputs(" #need_memory", ferr);
+                    fflush(ferr);
                     break;
                 }
                 // var_key
@@ -290,8 +307,10 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 fputss(e, s = pass_space(e), fout);
                 if (s == (e = pass_value(s))) {
                     free(var);
-                    fputs(e, fout);
+                    fputss(e, pass_line(e), fout);
+                    fflush(fout);
                     fputs(" #need_url", ferr);
+                    fflush(ferr);
                     break;
                 }
                 fputss(s, e, fout);
@@ -305,9 +324,10 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 e = pass_value(s);
                 var->changed = !string_compare(&var->value, s, e - s);
                 // var_value
+                if (!is_space(s[-1])) fputc(' ', fout);
                 string_fwrite(&var->value, fout);
                 // tails
-                fputs(e, fout);
+                fputss(e, pass_line(e), fout);
                 // vars
                 var->prev = ctx.vars;
                 ctx.vars = var;
@@ -324,8 +344,10 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 if (s == (e = pass_value(s))) {
                     string_cut(ctx.user_apikey_header, STRLEN(HEAD_EMAIL));
                     string_cut(ctx.user_apikey_header, STRLEN(HEAD_APIKEY));
-                    fputs(e, fout);
+                    fputss(e, pass_line(e), fout);
+                    fflush(fout);
                     fputs(" #need_apikey", ferr);
+                    fflush(ferr);
                     break;
                 }
                 string_cut(ctx.user_apikey_header, STRLEN(HEAD_APIKEY));
@@ -333,14 +355,14 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 string_c_str(&ctx.user_email_header);
                 fputss(s, e, fout);
                 // tails
-                fputs(e, fout);
+                fputss(e, pass_line(e), fout);
                 break;
             }
-            case '\\': {
+            case '/': {
                 // zone_name
                 string_copy(&ctx.zone_name, s, e - 1);
                 string_fwrite(&ctx.zone_name, fout);
-                fputc('\\', fout);
+                fputc('/', fout);
                 // zone_id
                 fputss(e, s = pass_space(e), fout);
                 if (s == (e = pass_value(s))) {
@@ -348,9 +370,10 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 } else {
                     string_copy(&ctx.zone_id, s, e);
                 }
+                if (!is_space(s[-1])) fputc(' ', fout);
                 string_fwrite(&ctx.zone_id, fout);
                 // tails
-                fputs(e, fout);
+                fputss(e, pass_line(e), fout);
                 break;
             }
             default: {
@@ -362,23 +385,29 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                     var = var->prev;
                 }
                 if (!var) {
-                    fputs(e, fout);
+                    fputss(e, pass_line(e), fout);
+                    fflush(fout);
                     fputs(" #var_undefined", ferr);
+                    fflush(ferr);
                     break;
                 }
                 // type
                 fputss(e, s = pass_space(e), fout);
                 if (s == (e = pass_value(s))) {
-                    fputs(e, fout);
+                    fputss(e, pass_line(e), fout);
+                    fflush(fout);
                     fputs(" #need_type", ferr);
+                    fflush(ferr);
                     break;
                 }
                 string_copy(&ctx.record_type, s, e);
                 // name
                 fputss(e, s = pass_space(e), fout);
                 if (s == (e = pass_value(s))) {
-                    fputs(e, fout);
+                    fputss(e, pass_line(e), fout);
+                    fflush(fout);
                     fputs(" #need_name", ferr);
+                    fflush(ferr);
                     break;
                 }
                 string_copy(&ctx.record_name, s, e);
@@ -410,6 +439,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 } else {
                     success = false;
                 }
+                if (!is_space(s[-1])) fputc(' ', fout);
                 string_fwrite(&ctx.record_id, fout);
                 // tails
                 if (!success) {
@@ -418,13 +448,15 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 } else if (e[-1] == '!') {
                     fputc(' ', fout);
                 }
-                fputs(e, fout);
+                fputss(e, pass_line(e), fout);
+                break;
             }
         }
     }
     while (ctx.vars) {
+        struct variable *prev = ctx.vars->prev;
         free(ctx.vars);
-        ctx.vars = ctx.vars->prev;
+        ctx.vars = prev;
     }
     return 0;
 }
