@@ -6,10 +6,9 @@
 
 #define URL_BASE "https://api.cloudflare.com/client/v4/zones"
 #define URL_DNS_RECORDS "/dns_records/"
-#define URL_GET_ZONE_ID (URL_BASE "?name=")
 #define HEAD_EMAIL "X-Auth-Email: "
 #define HEAD_APIKEY "X-Auth-Key: "
-#define JSON_GET_ZONE_ID_RESULT_HEAD "{\"result\":[{\"id\":\""
+#define JSON_RESULT_HEAD_OF_GET_ZONE_ID "{\"result\":[{\"id\":\""
 
 #define UNUSED __attribute__((unused))
 #define STRLEN(STR) (sizeof(STR) - 1)
@@ -64,7 +63,7 @@ typedef struct string {
 
 #define string_clear(str) (str).len = 0
 
-#define string_init(str, STR) memcpy((str).data, STR, (str).len = strlenof(STR))
+#define string_init(str, STR) memcpy((str).data, STR, (str).len = STRLEN(STR))
 
 #define string_cut(str, _len) (str).len = (_len)
 
@@ -135,8 +134,8 @@ curl_get_zone_id_callback(
         const size_t size,
         string *zone_id
 ) {
-    if (STARTS_WITH(JSON_GET_ZONE_ID_RESULT_HEAD, json, size)) {
-        char *start = json + STRLEN(JSON_GET_ZONE_ID_RESULT_HEAD);
+    if (STARTS_WITH(JSON_RESULT_HEAD_OF_GET_ZONE_ID, json, size)) {
+        char *start = json + STRLEN(JSON_RESULT_HEAD_OF_GET_ZONE_ID);
         char *end = json + (size < MAXSTR ? size : MAXSTR);
         for (char *i = start; i < end; ++i) {
             if (*i == '"') {
@@ -148,23 +147,22 @@ curl_get_zone_id_callback(
     return 0;
 }
 
-
-static void string_wget(string *str, const char *url) {
-    str->len = 0;
-    CURL *req = curl_easy_init();
-    curl_easy_setopt(req, CURLOPT_URL, url);
-    curl_easy_setopt(req, CURLOPT_WRITEFUNCTION, curl_get_string_callback);
-    curl_easy_setopt(req, CURLOPT_WRITEDATA, str);
-    curl_easy_perform(req);
-    curl_easy_cleanup(req);
+static void string_curl(string *str, const char *url) {
+    string_clear(*str);
+    CURL *curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_get_string_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, str);
+    curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
 }
- 
-typedef struct varible {
-    struct varible *prev;
+
+typedef struct variable {
+    struct variable *prev;
     string key;
     string value;
     bool changed;
-} varible;
+} variable;
 
 typedef struct context {
     string user_email_header;
@@ -174,11 +172,11 @@ typedef struct context {
     string record_id;
     string record_name;
     string record_type;
-    varible *vars;
+    variable *vars;
     struct curl_slist *headers;
 } context;
 
-static void context_init(context *ctx) {
+static void cfddns_context_init(context *ctx) {
     string_init(ctx->user_email_header, HEAD_EMAIL);
     string_init(ctx->user_apikey_header, HEAD_APIKEY);
     string_clear(ctx->zone_name);
@@ -194,32 +192,33 @@ static void context_init(context *ctx) {
 }
 
 
-static void cfddns_get_zone_id(const context *ctx, string *zone_id) {
+static void
+cfddns_get_zone_id(const context *ctx, string *zone_id) {
     string_clear(*zone_id);
 
-    CURL *req = curl_easy_init();
-    if (!req) return;
+    CURL *curl = curl_easy_init();
+    if (!curl) return;
 
     char url[255];
     // TODO: make url
 
-    curl_easy_setopt(req, CURLOPT_URL, url);
-    curl_easy_setopt(req, CURLOPT_HEADER, ctx->headers);
-    curl_easy_setopt(req, CURLOPT_WRITEFUNCTION, curl_get_zone_id_callback);
-    curl_easy_setopt(req, CURLOPT_WRITEDATA, zone_id);
-    curl_easy_perform(req);
-    curl_easy_cleanup(req);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_HEADER, ctx->headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_get_zone_id_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, zone_id);
+    curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
 }
 
 static void
 cfddns_get_record_id(const context *ctx, string *record_id) {
-    // TODO: get record id
+    // TODO
 }
 
 static bool
 cfddns_update_record(const context *ctx, const string *content) {
-    CURL *req = curl_easy_init();
-    if (!req) return false;
+    CURL *curl = curl_easy_init();
+    if (!curl) return false;
 
     char url[STRLEN(URL_BASE) + 1 + ctx->zone_id.len + STRLEN(URL_DNS_RECORDS) + id->len + 1];
     size_t url_len = 0;
@@ -240,50 +239,50 @@ cfddns_update_record(const context *ctx, const string *content) {
     url_len += id->len;
 
     *(url + url_len) = '\0';
-    
-    string req_json;
+
+    string request;
     // TODO: make json
 
-    string result;
+    string response;
 
-    curl_easy_setopt(req, CURLOPT_HTTPHEADER, ctx->headers);
-    curl_easy_setopt(req, CURLOPT_URL, url);
-    curl_easy_setopt(req, CURLOPT_CUSTOMREQUEST, "PUT");
-    curl_easy_setopt(req, CURLOPT_WRITEFUNCTION, curl_get_string_callback);
-    curl_easy_setopt(req, CURLOPT_WRITEDATA, &result);
-    curl_easy_setopt(req, CURLOPT_POSTFIELDS, req_json);
-    curl_easy_perform(req);
-    curl_easy_cleanup(req);
-    
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, ctx->headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_get_string_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+
     // TODO: check result
-    return strstr(string_tostr(&result), "success");
+    return strstr(string_tostr(&response), "success");
 }
 
-static char *cfddns_pass_space(char *i) {
+static char *pass_space(char *i) {
     while (*i == ' ') ++i;
     if (*i == '#') for (++i; *i; ++i);
     return i;
 }
 
-static bool cfddns_is_value(char c) {
+static bool is_value(char c) {
     return c && c != ' ' && c != '#';
 }
 
-static char *cfddns_pass_value(char *i) {
-    while (cfddns_is_value(*i)) ++i;
+static char *pass_value(char *i) {
+    while (is_value(*i)) ++i;
     return i;
 }
 
 static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
     context ctx;
-    context_init(&ctx);
+    cfddns_context_init(&ctx);
     for (char line[MAXLINE]; fgets(line, MAXLINE, fin); fputc('\n', fout)) {
         char *s, *e = line;
-        fputss(e, s = cfddns_pass_space(e), fout);
-        if (s == (e = cfddns_pass_value(s))) continue;
+        fputss(e, s = pass_space(e), fout);
+        if (s == (e = pass_value(s))) continue;
         switch (e[-1]) {
             case '?': {
-                varible *var = malloc(sizeof(varible));
+                variable *var = malloc(sizeof(variable));
                 if (!var) {
                     fputss(s, e, fout);
                     fputs(e, fout);
@@ -295,8 +294,8 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 string_fwrite(&var->key, fout);
                 fputc('?', fout);
                 // url
-                fputss(e, s = cfddns_pass_space(e), fout);
-                if (s == (e = cfddns_pass_value(s))) {
+                fputss(e, s = pass_space(e), fout);
+                if (s == (e = pass_value(s))) {
                     free(var);
                     fputs(e, fout);
                     fputs(" #need_url", ferr);
@@ -306,11 +305,11 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 // url => var_value
                 char _e = *e;
                 *e = '\0';
-                string_wget(&var->value, s);
+                string_curl(&var->value, s);
                 *e = _e;
                 // value_old => var_changed
-                fputss(e, s = cfddns_pass_space(e), fout);
-                e = cfddns_pass_value(s);
+                fputss(e, s = pass_space(e), fout);
+                e = pass_value(s);
                 var->changed = !string_compare(&var->value, s, e - s);
                 // var_value
                 string_fwrite(&var->value, fout);
@@ -324,12 +323,12 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
             case ':': {
                 // user_email_header
                 string_cut(ctx.user_apikey_header, STRLEN(HEAD_EMAIL));
-                string_concat(&ctx.user_email_header, s, e - 1);       
-                string_tostr(&ctx.user_email_header);     
+                string_concat(&ctx.user_email_header, s, e - 1);
+                string_tostr(&ctx.user_email_header);
                 fputss(s, e, fout);
                 // user_apikey_header
-                fputss(e, s = cfddns_pass_space(e), fout);
-                if (s == (e = cfddns_pass_value(s))) {
+                fputss(e, s = pass_space(e), fout);
+                if (s == (e = pass_value(s))) {
                     string_cut(ctx.user_apikey_header, STRLEN(HEAD_EMAIL));
                     string_cut(ctx.user_apikey_header, STRLEN(HEAD_APIKEY));
                     fputs(e, fout);
@@ -338,7 +337,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 }
                 string_cut(ctx.user_apikey_header, STRLEN(HEAD_APIKEY));
                 string_concat(&ctx.user_apikey_header, s, e);
-                string_tostr(&ctx.user_email_header);     
+                string_tostr(&ctx.user_email_header);
                 fputss(s, e, fout);
                 // tails
                 fputs(e, fout);
@@ -350,8 +349,8 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 string_fwrite(&ctx.zone_name, fout);
                 fputc('\\', fout);
                 // zone_id
-                fputss(e, s = cfddns_pass_space(e), fout);
-                if (s == (e = cfddns_pass_value(s))) {
+                fputss(e, s = pass_space(e), fout);
+                if (s == (e = pass_value(s))) {
                     cfddns_get_zone_id(&ctx, &ctx.zone_id);
                 } else {
                     string_copy(&ctx.zone_id, s, e);
@@ -363,7 +362,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
             }
             default: {
                 // var_key
-                varible *var = ctx.vars;
+                variable *var = ctx.vars;
                 size_t var_key_len = e - s;
                 fwrite(s, 1, var_key_len, fout);
                 while (var && !string_compare(&var->key, s, var_key_len)) {
@@ -375,16 +374,16 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                     break;
                 }
                 // type
-                fputss(e, s = cfddns_pass_space(e), fout);
-                if (s == (e = cfddns_pass_value(s))) {
+                fputss(e, s = pass_space(e), fout);
+                if (s == (e = pass_value(s))) {
                     fputs(e, fout);
                     fputs(" #need_type", ferr);
                     break;
                 }
                 string_copy(&ctx.record_type, s, e);
                 // name
-                fputss(e, s = cfddns_pass_space(e), fout);
-                if (s == (e = cfddns_pass_value(s))) {
+                fputss(e, s = pass_space(e), fout);
+                if (s == (e = pass_value(s))) {
                     fputs(e, fout);
                     fputs(" #need_name", ferr);
                     break;
@@ -392,8 +391,8 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 string_copy(&ctx.record_name, s, e);
                 // id
                 bool force_update, may_expired;
-                fputss(e, s = cfddns_pass_space(e), fout);
-                if (s == (e = cfddns_pass_value(s))) {
+                fputss(e, s = pass_space(e), fout);
+                if (s == (e = pass_value(s))) {
                     force_update = true;
                     may_expired = false;
                     cfddns_get_record_id(&ctx, &ctx.record_id);
@@ -422,7 +421,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 // tails
                 if (!success) {
                     fputc('!', fout);
-                    if (*e == ' ' && !cfddns_is_value(e[1])) ++e;
+                    if (*e == ' ' && !is_value(e[1])) ++e;
                 } else if (e[-1] == '!') {
                     fputc(' ', fout);
                 }
@@ -430,7 +429,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
             }
         }
     }
-    for (varible *var = ctx.vars; var; var = var->prev) {
+    for (variable *var = ctx.vars; var; var = var->prev) {
         free(var);
     }
     return 0;
