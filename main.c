@@ -33,14 +33,20 @@ static size_t fputss(const char *start, const char *end, FILE *file) {
     return fwrite(start, sizeof(char), end - start, file);
 }
 
+#define strcat_literal(var, STR) memcpy(var + var##_len, STR, STRLEN(STR)); var##_len += STRLEN(STR)
+#define strcat_char(var, c) var[var##_len++] = c;
+#define strcat_string(var, str) memcpy(var + var##_len, str.data, str.len); var##_len += str.len
+
 // #define declare_header(Identifier, HEAD, str) \
 // char Identifier[STRLEN(HEAD) + str.len + 1]; \
 // memcpy(Identifier, HEAD, STRLEN(HEAD)); \
 // memcpy(Identifier + STRLEN(HEAD), str.data, str.len); \
 // Identifier[STRLEN(HEAD) + str.len] = '\0'
 
-#define MAXSTR 254 // max: 254
-#define MAXLINE PIPE_BUF
+#define STR_MAX 254 // max=254
+#define URL_MAX 2048
+#define JSON_MAX 2048
+#define LINE_MAX PIPE_BUF
 char BASENAME[NAME_MAX + 1];
 
 // static const char *pass_ipv4_init_part(const char *c) {
@@ -77,7 +83,7 @@ char BASENAME[NAME_MAX + 1];
 
 typedef struct {
     unsigned char len;
-    char data[MAXSTR + 1];
+    char data[255];
 } string;
 
 #define string_clear(str) (str).len = 0
@@ -99,18 +105,17 @@ static bool string_compare(const string *str, const char *s, const size_t n) {
 // }
 
 static void string_copy(string *str, const char *s, const char *e) {
-    memcpy(str->data, s, str->len = e - s < MAXSTR ? e - s : MAXSTR);
+    memcpy(str->data, s, str->len = e - s < STR_MAX ? e - s : STR_MAX);
 }
 
 static void string_concat(string *str, const char *s, const char *e) {
-    size_t n = e - s < MAXSTR - str->len ? e - s : MAXSTR - str->len;
+    size_t n = e - s < STR_MAX - str->len ? e - s : STR_MAX - str->len;
     memcpy(str->data + str->len, s, n);
     str->len += n;
 }
 
-static char *string_tostr(string *str) {
+static void string_c_str(string *str) {
     str->data[str->len] = '\0';
-    return str->data;
 }
 
 static size_t string_fwrite(const string *str, FILE *file) {
@@ -124,15 +129,15 @@ curl_get_string_callback(
         const size_t len,
         string *str
 ) {
-    if (str->len < MAXSTR) {
+    if (str->len < STR_MAX) {
         const char *end = data + len;
         for (const char *s = data; s < end; ++s) {
             if (*s != '\0' && *s != '\n' && *s != ' ') {
                 const char *e = s + 1;
                 while (e < end && *e != '\0' && *e != '\n' && *e != ' ') ++e;
                 size_t n = e - s;
-                if (n > MAXSTR - str->len)
-                    n = MAXSTR - str->len;
+                if (n > STR_MAX - str->len)
+                    n = STR_MAX - str->len;
                 memcpy(str->data + str->len, s, n);
                 str->len += n;
                 break;
@@ -151,7 +156,7 @@ curl_get_zone_id_callback(
 ) {
     if (STARTS_WITH(JSON_RESULT_HEAD_OF_GET_ZONE_ID, json, size)) {
         char *start = json + STRLEN(JSON_RESULT_HEAD_OF_GET_ZONE_ID);
-        char *end = json + (size < MAXSTR ? size : MAXSTR);
+        char *end = json + (size < STR_MAX ? size : STR_MAX);
         for (char *i = start; i < end; ++i) {
             if (*i == '"') {
                 string_copy(&zone_id, start, i);
@@ -214,7 +219,7 @@ cfddns_get_zone_id(const struct context *ctx, string *zone_id) {
     CURL *curl = curl_easy_init();
     if (!curl) return;
 
-    char url[255];
+    char url[URL_MAX];
     // TODO: make url
 
     curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -235,27 +240,17 @@ cfddns_update_record(const struct context *ctx, const string *record_content) {
     CURL *curl = curl_easy_init();
     if (!curl) return false;
 
-    char url[STRLEN(URL_BASE) + 1 + ctx->zone_id.len + STRLEN(URL_DNS_RECORDS) + ctx->record_id.len + 1];
+    char url[URL_MAX];
     size_t url_len = 0;
+    strcat_literal(url, URL_BASE);
+    strcat_char   (url, '/');
+    strcat_string (url, ctx->zone_id);
+    strcat_literal(url, URL_DNS_RECORDS);
+    strcat_string (url, ctx->record_id);
+    url[url_len] = '\0';
 
-    memcpy(url + url_len, URL_BASE, STRLEN(URL_BASE));
-    url_len += STRLEN(URL_BASE);
-
-    *(url + url_len) = '/';
-    url_len += 1;
-
-    memcpy(url + url_len, ctx->zone_id.data, ctx->zone_id.len);
-    url_len += ctx->zone_id.len;
-
-    memcpy(url + url_len, URL_DNS_RECORDS, STRLEN(URL_DNS_RECORDS));
-    url_len += STRLEN(URL_DNS_RECORDS);
-
-    memcpy(url + url_len, ctx->record_id.data, ctx->record_id.len);
-    url_len += ctx->record_id.len;
-
-    *(url + url_len) = '\0';
-
-    string request;
+    char request[JSON_MAX];
+    size_t request_len = 0;
     // TODO: make json
 
     string response;
@@ -271,13 +266,14 @@ cfddns_update_record(const struct context *ctx, const string *record_content) {
     curl_easy_cleanup(curl);
 
     // TODO: check result
-    return strstr(string_tostr(&response), "success");
+    string_c_str(&response);
+    return strstr(response.data, "success");
 }
 
 static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
     struct context ctx;
     cfddns_context_init(&ctx);
-    for (char line[MAXLINE]; fgets(line, MAXLINE, fin); fputc('\n', fout)) {
+    for (char line[LINE_MAX]; fgets(line, LINE_MAX, fin); fputc('\n', fout)) {
         char *s, *e = line;
         fputss(e, s = pass_space(e), fout);
         if (s == (e = pass_value(s))) continue;
@@ -325,7 +321,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 // user_email_header
                 string_cut(ctx.user_apikey_header, STRLEN(HEAD_EMAIL));
                 string_concat(&ctx.user_email_header, s, e - 1);
-                string_tostr(&ctx.user_email_header);
+                string_c_str(&ctx.user_email_header);
                 fputss(s, e, fout);
                 // user_apikey_header
                 fputss(e, s = pass_space(e), fout);
@@ -338,7 +334,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 }
                 string_cut(ctx.user_apikey_header, STRLEN(HEAD_APIKEY));
                 string_concat(&ctx.user_apikey_header, s, e);
-                string_tostr(&ctx.user_email_header);
+                string_c_str(&ctx.user_email_header);
                 fputss(s, e, fout);
                 // tails
                 fputs(e, fout);
