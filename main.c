@@ -319,6 +319,13 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 *e = '\0';
                 string_curl(&var->value, s);
                 *e = _e;
+                if (!var->value.len) {
+                    fputss(e, pass_line(e), fout);
+                    fflush(fout);
+                    fputs(" #request_failed", ferr);
+                    fflush(ferr);
+                    break;
+                }
                 // value_old => var_changed
                 fputss(e, s = pass_space(e), fout);
                 e = pass_value(s);
