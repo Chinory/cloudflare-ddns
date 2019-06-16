@@ -39,7 +39,7 @@ static size_t fputss(const char *start, const char *end, FILE *file) {
 // memcpy(Identifier + STRLEN(HEAD), str.data, str.len); \
 // Identifier[STRLEN(HEAD) + str.len] = '\0'
 
-#define MAXSTR 254
+#define MAXSTR 254 // max: 254
 #define MAXLINE PIPE_BUF
 char BASENAME[NAME_MAX + 1];
 
@@ -75,7 +75,7 @@ char BASENAME[NAME_MAX + 1];
 //     return pass_ipv4_last_part(c);
 // }
 
-typedef struct string {
+typedef struct {
     unsigned char len;
     char data[MAXSTR + 1];
 } string;
@@ -172,33 +172,33 @@ static void string_curl(string *str, const char *url) {
     curl_easy_cleanup(curl);
 }
 
-typedef struct variable {
+struct variable {
     struct variable *prev;
     string key;
     string value;
     bool changed;
-} variable;
+};
 
-typedef struct context {
+struct context {
     string user_email_header;
     string user_apikey_header;
-    string zone_name;
     string zone_id;
+    string zone_name;
+    string record_id;
     string record_name;
     string record_type;
-    string record_id;
-    variable *vars;
+    struct variable *vars;
     struct curl_slist *headers;
-} context;
+};
 
-static void cfddns_context_init(context *ctx) {
+static void cfddns_context_init(struct context *ctx) {
     string_init(ctx->user_email_header, HEAD_EMAIL);
     string_init(ctx->user_apikey_header, HEAD_APIKEY);
-    string_clear(ctx->zone_name);
     string_clear(ctx->zone_id);
+    string_clear(ctx->zone_name);
+    string_clear(ctx->record_id);
     string_clear(ctx->record_name);
     string_clear(ctx->record_type);
-    string_clear(ctx->record_id);
     ctx->vars = NULL;
     ctx->headers = NULL;
     ctx->headers = curl_slist_append(ctx->headers, ctx->user_email_header.data);
@@ -208,7 +208,7 @@ static void cfddns_context_init(context *ctx) {
 
 
 static void
-cfddns_get_zone_id(const context *ctx, string *zone_id) {
+cfddns_get_zone_id(const struct context *ctx, string *zone_id) {
     string_clear(*zone_id);
 
     CURL *curl = curl_easy_init();
@@ -226,16 +226,16 @@ cfddns_get_zone_id(const context *ctx, string *zone_id) {
 }
 
 static void
-cfddns_get_record_id(const context *ctx, string *record_id) {
+cfddns_get_record_id(const struct context *ctx, string *record_id) {
     // TODO
 }
 
 static bool
-cfddns_update_record(const context *ctx, const string *content) {
+cfddns_update_record(const struct context *ctx, const string *record_content) {
     CURL *curl = curl_easy_init();
     if (!curl) return false;
 
-    char url[STRLEN(URL_BASE) + 1 + ctx->zone_id.len + STRLEN(URL_DNS_RECORDS) + id->len + 1];
+    char url[STRLEN(URL_BASE) + 1 + ctx->zone_id.len + STRLEN(URL_DNS_RECORDS) + ctx->record_id.len + 1];
     size_t url_len = 0;
 
     memcpy(url + url_len, URL_BASE, STRLEN(URL_BASE));
@@ -250,8 +250,8 @@ cfddns_update_record(const context *ctx, const string *content) {
     memcpy(url + url_len, URL_DNS_RECORDS, STRLEN(URL_DNS_RECORDS));
     url_len += STRLEN(URL_DNS_RECORDS);
 
-    memcpy(url + url_len, id->data, id->len);
-    url_len += id->len;
+    memcpy(url + url_len, ctx->record_id.data, ctx->record_id.len);
+    url_len += ctx->record_id.len;
 
     *(url + url_len) = '\0';
 
@@ -259,6 +259,7 @@ cfddns_update_record(const context *ctx, const string *content) {
     // TODO: make json
 
     string response;
+    string_clear(response);
 
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -274,7 +275,7 @@ cfddns_update_record(const context *ctx, const string *content) {
 }
 
 static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
-    context ctx;
+    struct context ctx;
     cfddns_context_init(&ctx);
     for (char line[MAXLINE]; fgets(line, MAXLINE, fin); fputc('\n', fout)) {
         char *s, *e = line;
@@ -282,7 +283,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
         if (s == (e = pass_value(s))) continue;
         switch (e[-1]) {
             case '?': {
-                variable *var = malloc(sizeof(variable));
+                struct variable *var = malloc(sizeof(struct variable));
                 if (!var) {
                     fputss(s, e, fout);
                     fputs(e, fout);
@@ -362,7 +363,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
             }
             default: {
                 // var_key
-                variable *var = ctx.vars;
+                struct variable *var = ctx.vars;
                 size_t var_key_len = e - s;
                 fwrite(s, 1, var_key_len, fout);
                 while (var && !string_compare(&var->key, s, var_key_len)) {
@@ -429,8 +430,9 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
             }
         }
     }
-    for (variable *var = ctx.vars; var; var = var->prev) {
-        free(var);
+    while (ctx.vars) {
+        free(ctx.vars);
+        ctx.vars = ctx.vars->prev;
     }
     return 0;
 }
