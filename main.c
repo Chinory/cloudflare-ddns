@@ -10,9 +10,28 @@
 #define HEAD_APIKEY "X-Auth-Key: "
 #define JSON_RESULT_HEAD_OF_GET_ZONE_ID "{\"result\":[{\"id\":\""
 
+static char *pass_space(char *i) {
+    while (*i == ' ') ++i;
+    if (*i == '#') for (++i; *i; ++i);
+    return i;
+}
+
+static bool is_value(char c) {
+    return c && c != ' ' && c != '#';
+}
+
+static char *pass_value(char *i) {
+    while (is_value(*i)) ++i;
+    return i;
+}
+
 #define UNUSED __attribute__((unused))
 #define STRLEN(STR) (sizeof(STR) - 1)
 #define STARTS_WITH(STR, str, len) (len < sizeof(STR) && memcmp(STR, str, len))
+
+static size_t fputss(const char *start, const char *end, FILE *file) {
+    return fwrite(start, sizeof(char), end - start, file);
+}
 
 // #define declare_header(Identifier, HEAD, str) \
 // char Identifier[STRLEN(HEAD) + str.len + 1]; \
@@ -98,10 +117,6 @@ static size_t string_fwrite(const string *str, FILE *file) {
     return fwrite(str->data, sizeof(char), str->len, file);
 }
 
-static size_t fputss(const char *start, const char *end, FILE *file) {
-    return fwrite(start, sizeof(char), end - start, file);
-}
-
 static size_t
 curl_get_string_callback(
         const char *data,
@@ -167,11 +182,11 @@ typedef struct variable {
 typedef struct context {
     string user_email_header;
     string user_apikey_header;
-    string zone_id;
     string zone_name;
-    string record_id;
+    string zone_id;
     string record_name;
     string record_type;
+    string record_id;
     variable *vars;
     struct curl_slist *headers;
 } context;
@@ -256,21 +271,6 @@ cfddns_update_record(const context *ctx, const string *content) {
 
     // TODO: check result
     return strstr(string_tostr(&response), "success");
-}
-
-static char *pass_space(char *i) {
-    while (*i == ' ') ++i;
-    if (*i == '#') for (++i; *i; ++i);
-    return i;
-}
-
-static bool is_value(char c) {
-    return c && c != ' ' && c != '#';
-}
-
-static char *pass_value(char *i) {
-    while (is_value(*i)) ++i;
-    return i;
 }
 
 static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
@@ -412,7 +412,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *ferr) {
                 } else if (cfddns_update_record(&ctx, &var->value)) {
                     success = true;
                 } else if (may_expired) {
-                    cfddns_get_record_id(&ctx);
+                    cfddns_get_record_id(&ctx, &ctx.record_id);
                     success = cfddns_update_record(&ctx, &var->value);
                 } else {
                     success = false;
