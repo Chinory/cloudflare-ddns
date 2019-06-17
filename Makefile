@@ -2,7 +2,7 @@ prefix = /usr/local
 bindir = $(prefix)/bin
 
 PROG = cfddns
-SRCS = main.c
+SRCS = cfddns.c
 OBJS = $(SRCS:.c=.o)
 
 LIBS = -lcurl

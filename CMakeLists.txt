@@ -3,6 +3,6 @@ project(cfddns C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(cfddns main.c)
+add_executable(cfddns cfddns.c)
 
 target_link_libraries(cfddns curl)
