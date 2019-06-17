@@ -12,10 +12,9 @@ CFLAGS += -std=c11 -O2 -Wall
 all: $(PROG)
 
 install: $(PROG)
-	install -d $(bindir)
 	install -D -m 755 $(PROG) $(bindir)/$(PROG)
 
-remove:
+uninstall:
 	-rm -f $(bindir)/$(PROG)
 
 clean:
@@ -28,4 +27,4 @@ clean:
 $(PROG): $(OBJS)
 	$(CC) $(LDFLAGS) $(OBJS) $(LIBS) -o $@
 
-.PHONY: all clean install
+.PHONY: all install uninstall clean

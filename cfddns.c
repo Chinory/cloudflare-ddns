@@ -1,26 +1,3 @@
-/*
- * MIT License
- * 
- * Copyright (c) 2019 Chinory <chinory@cup.moe>
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -55,7 +32,6 @@ static char *pass_value(char *i) {
 
 static char *pass_space(char *i) {
     while (is_space(*i)) ++i;
-//    if (*i == '#') for (++i; !is_end(*i); ++i);
     return i;
 }
 
@@ -76,38 +52,6 @@ static void fputcn(char c, size_t n, FILE *file) {
 }
 
 char BASENAME[NAME_MAX + 1];
-
-// static const char *pass_ipv4_init_part(const char *c) {
-//     if (c[0] < '0' || c[0] > '9') return 0;
-//     if (c[1] == '.') return c + 2;
-//     if (c[1] < '0' || c[1] > '9') return 0;
-//     if (c[2] == '.') return c + 3;
-//     if (c[2] < '0' || c[2] > '9') return 0;
-//     if (c[3] != '.') return 0;
-//     if ((((unsigned) (c[0] - '0') * 10) +
-//          (unsigned) (c[1] - '0')) * 10 +
-//         (unsigned) (c[2] - '0') <= 255)
-//         return c + 3;
-//     return 0;
-// }
-
-// static const char *pass_ipv4_last_part(const char *c) {
-//     if (c[0] < '0' || c[0] > '9') return 0;
-//     if (c[1] < '0' || c[1] > '9') return c + 1;
-//     if (c[2] < '0' || c[2] > '9') return c + 2;
-//     if ((((unsigned) (c[0] - '0') * 10) +
-//          (unsigned) (c[1] - '0')) * 10 +
-//         (unsigned) (c[2] - '0') <= 255)
-//         return c + 3;
-//     return 0;
-// }
-
-// static const char *pass_ipv4(const char *c) {
-//     if (!(c = pass_ipv4_init_part(c))) return 0;
-//     if (!(c = pass_ipv4_init_part(c))) return 0;
-//     if (!(c = pass_ipv4_init_part(c))) return 0;
-//     return pass_ipv4_last_part(c);
-// }
 
 typedef struct string {
     unsigned char len;
@@ -254,17 +198,6 @@ static void curl_string_getln(const char *url, string *str) {
     curl_easy_perform(curl);
     curl_easy_cleanup(curl);
 }
-
-//static void curl_lstring_getln(const char *url, lstring *lstr) {
-//    lstring_clear(lstr);
-//    CURL *curl = curl_easy_init();
-//    if (!curl) return;
-//    curl_easy_setopt(curl, CURLOPT_URL, url);
-//    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_lstring_getln_callback);
-//    curl_easy_setopt(curl, CURLOPT_WRITEDATA, lstr);
-//    curl_easy_perform(curl);
-//    curl_easy_cleanup(curl);
-//}
 
 struct variable {
     struct variable *prev;
