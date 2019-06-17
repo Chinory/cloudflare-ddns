@@ -102,6 +102,10 @@ static inline void string_make_str(string *str) {
     str->data[str->len] = '\0';
 }
 
+static inline bool string_compare_range(const string *str, const char *s, const char *e) {
+    return str->len == e - s && memcmp(str->data, s, e - s);
+}
+
 static inline bool string_compare_slice(const string *str, const char *s, size_t n) {
     return str->len == n && memcmp(str->data, s, n);
 }
@@ -406,6 +410,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     fputss(s, e, fout);
                     fputss(s, e, flog);
                     // url => var_value
+                    fflush(flog);
                     char _e = *e;
                     *e = '\0';
                     curl_string_getln(s, &var->value);
@@ -423,7 +428,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     fputss(e, s, fout);
                     fputss(e, s, flog);
                     e = pass_value(s);
-                    var->changed = !string_compare_slice(&var->value, s, e - s);
+                    var->changed = !string_compare_range(&var->value, s, e);
                     // var_value
                     if (!is_space(s[-1])) {
                         fputc(' ', fout);
@@ -450,6 +455,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     // user_apikey_header
                     s = pass_space(e);
                     fputss(e, s, fout);
+                    fputss(e, s, flog);
                     e = pass_value(s);
                     if (s == e) {
                         string_set_len(&ctx.user_apikey_header, STRLEN(HEAD_EMAIL));
@@ -484,6 +490,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     fputss(e, s, flog);
                     e = pass_value(s);
                     if (s == e) {
+                        fflush(flog);
                         cfddns_get_zone_id(&ctx, &ctx.zone_id);
                     } else {
                         string_copy_range(&ctx.zone_id, s, e);
@@ -562,6 +569,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                         string_copy_range(&ctx.record_id, s, e);
                     }
                     // do update
+                    fflush(flog);
                     bool success;
                     if (!ctx.record_id.len) {
                         success = false;
