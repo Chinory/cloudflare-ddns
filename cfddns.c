@@ -548,33 +548,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     break;
                 }
                 default: {
-                    // var_key
-                    variable *var = ctx.vars;
-                    size_t var_key_len = e - s;
-                    fwrite(s, 1, var_key_len, fout);
-                    fwrite(s, 1, var_key_len, flog);
-                    while (var && !string_compare_slice(&var->key, s, var_key_len)) {
-                        var = var->prev;
-                    }
-                    if (!var) {
-                        s = pass_line(e);
-                        fputss(e, s, fout);
-                        fputss(e, s, flog);
-                        fputs(" #var_undefined", flog);
-                        break;
-                    }
                     // type
-                    s = pass_space(e);
-                    fputss(e, s, fout);
-                    fputss(e, s, flog);
-                    e = pass_value(s);
-                    if (s == e) {
-                        s = pass_line(e);
-                        fputss(e, s, fout);
-                        fputss(e, s, flog);
-                        fputs(" #need_type", flog);
-                        break;
-                    }
                     string_copy_range(&ctx.record_type, s, e);
                     string_fwrite(&ctx.record_type, fout);
                     string_fwrite(&ctx.record_type, flog);
@@ -593,6 +567,32 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     string_copy_range(&ctx.record_name, s, e);
                     string_fwrite(&ctx.record_name, fout);
                     string_fwrite(&ctx.record_name, flog);
+                    // var_key
+                    s = pass_space(e);
+                    fputss(e, s, fout);
+                    fputss(e, s, flog);
+                    e = pass_value(s);
+                    if (s == e) {
+                        s = pass_line(e);
+                        fputss(e, s, fout);
+                        fputss(e, s, flog);
+                        fputs(" #need_var", flog);
+                        break;
+                    }
+                    variable *var = ctx.vars;
+                    size_t var_key_len = e - s;
+                    fwrite(s, 1, var_key_len, fout);
+                    fwrite(s, 1, var_key_len, flog);
+                    while (var && !string_compare_slice(&var->key, s, var_key_len)) {
+                        var = var->prev;
+                    }
+                    if (!var) {
+                        s = pass_line(e);
+                        fputss(e, s, fout);
+                        fputss(e, s, flog);
+                        fputs(" #var_undefined", flog);
+                        break;
+                    }
                     // content
                     string_clear(&ctx.record_content);
                     // id
