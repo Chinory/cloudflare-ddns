@@ -102,12 +102,16 @@ static inline void string_make_str(string *str) {
     str->data[str->len] = '\0';
 }
 
+static inline bool string_compare(const string *str, const string *_str) {
+    return str->len == _str->len && !memcmp(str->data, _str->data, _str->len);
+}
+
 static inline bool string_compare_range(const string *str, const char *s, const char *e) {
-    return str->len == e - s && memcmp(str->data, s, e - s);
+    return str->len == e - s && !memcmp(str->data, s, e - s);
 }
 
 static inline bool string_compare_slice(const string *str, const char *s, size_t n) {
-    return str->len == n && memcmp(str->data, s, n);
+    return str->len == n && !memcmp(str->data, s, n);
 }
 
 static inline void string_copy_str(string *str, const char *s) {
@@ -190,9 +194,9 @@ curl_lstring_getln_callback(
     if (lstr->len < LSTR_MAX) {
         const char *end = data + len;
         for (const char *s = data; s < end; ++s) {
-            if (*s != '\0' && *s != '\n' && *s != ' ') {
+            if (*s != '\0') {
                 const char *e = s + 1;
-                while (e < end && *e != '\0' && *e != '\n' && *e != ' ') ++e;
+                while (e < end && *e != '\0') ++e;
                 size_t n = e - s;
                 if (n > LSTR_MAX - lstr->len)
                     n = LSTR_MAX - lstr->len;
@@ -240,10 +244,10 @@ struct context {
     string zone_id;
     string zone_name;
     string record_id;
-    string record_name;
     string record_type;
+    string record_name;
+    string record_content;
     struct variable *vars;
-    struct curl_slist *headers;
 };
 
 static void
@@ -253,19 +257,14 @@ cfddns_context_init(struct context *ctx) {
     string_clear(&ctx->zone_id);
     string_clear(&ctx->zone_name);
     string_clear(&ctx->record_id);
-    string_clear(&ctx->record_name);
     string_clear(&ctx->record_type);
+    string_clear(&ctx->record_name);
+    string_clear(&ctx->record_content);
     ctx->vars = NULL;
-    ctx->headers = NULL;
-    ctx->headers = curl_slist_append(ctx->headers, ctx->user_email_header.data);
-    ctx->headers = curl_slist_append(ctx->headers, ctx->user_apikey_header.data);
-    ctx->headers = curl_slist_append(ctx->headers, "Content-Type: application/json");
 }
 
 static void
 cfddns_context_cleanup(struct context *ctx) {
-    curl_slist_free_all(ctx->headers);
-    ctx->headers = NULL;
     while (ctx->vars) {
         struct variable *prev = ctx->vars->prev;
         free(ctx->vars);
@@ -288,36 +287,77 @@ cfddns_get_zone_id(const struct context *ctx, string *zone_id) {
     lstring_concat_string(&url, &ctx->zone_name);
     lstring_make_str(&url);
 
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, ctx->user_email_header.data);
+    headers = curl_slist_append(headers, ctx->user_apikey_header.data);
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
     lstring response;
     lstring_clear(&response);
     curl_easy_setopt(curl, CURLOPT_URL, url.data);
-    curl_easy_setopt(curl, CURLOPT_HEADER, ctx->headers);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_lstring_getln_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
     curl_easy_cleanup(curl);
     lstring_make_str(&response);
 
+    curl_slist_free_all(headers);
+
     char *s = strstr(response.data, "\"result\":[{\"id\":\"");
     if (!s) return;
-    char *e = strchr(s + STRLEN("\"result\":[{\"id\":\""), '"');
+    char *e = strchr(s += STRLEN("\"result\":[{\"id\":\""), '"');
     if (!e) return;
     string_copy_range(zone_id, s, e);
 }
 
-static void
-cfddns_get_record_id(const struct context *ctx, string *record_id) {
+static bool
+cfddns_get_record_id(const struct context *ctx, string *record_id, string *record_content) {
+    string_clear(record_id);
+    string_clear(record_content);
+
     CURL *curl = curl_easy_init();
-    if (!curl) return;
+    if (!curl) return false;
 
     lstring url;
     lstring_clear(&url);
     lstring_concat_str(&url, URL_BASE);
     lstring_concat_str(&url, "/zones/");
     lstring_concat_string(&url, &ctx->zone_id);
-    lstring_concat_str(&url, "/dns_records/");
-    lstring_concat_string(&url, &ctx->record_id);
+    lstring_concat_str(&url, "/dns_records?type=");
+    lstring_concat_string(&url, &ctx->record_type);
+    lstring_concat_str(&url, "&name=");
+    lstring_concat_string(&url, &ctx->record_name);
     lstring_make_str(&url);
+
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, ctx->user_email_header.data);
+    headers = curl_slist_append(headers, ctx->user_apikey_header.data);
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+
+    lstring response;
+    lstring_clear(&response);
+    curl_easy_setopt(curl, CURLOPT_URL, url.data);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_lstring_getln_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+    lstring_make_str(&response);
+
+    curl_slist_free_all(headers);
+
+    char *s, *e;
+
+    if (!(s = strstr(response.data, "\"id\":\""))) return false;
+    if (!(e = strchr(s += STRLEN("\"id\":\""), '"'))) return false;
+    string_copy_range(record_id, s, e);
+
+    if (!(s = strstr(response.data, "\"content\":\""))) return false;
+    if (!(e = strchr(s += STRLEN("\"content\":\""), '"'))) return false;
+    string_copy_range(record_content, s, e);
+
+    return true;
 }
 
 static bool
@@ -344,18 +384,25 @@ cfddns_update_record(const struct context *ctx, const string *record_content) {
     lstring_concat_string(&request, record_content);
     lstring_concat_str(&request, "\"}");
     lstring_make_str(&request);
+
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, ctx->user_email_header.data);
+    headers = curl_slist_append(headers, ctx->user_apikey_header.data);
+    headers = curl_slist_append(headers, "Content-Type: application/json");
     
     lstring response;
     lstring_clear(&response);
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_URL, url.data);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, ctx->headers);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, request.data);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_lstring_getln_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
     curl_easy_cleanup(curl);
     lstring_make_str(&response);
+
+    curl_slist_free_all(headers);
 
     return strstr(response.data, "\"success\":true");
 }
@@ -440,6 +487,10 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     s = pass_line(e);
                     fputss(e, s, fout);
                     fputss(e, s, flog);
+                    // var_changed
+                    if (var->changed) {
+                        fputs(" #changed", flog);
+                    }
                     // vars
                     var->prev = ctx.vars;
                     ctx.vars = var;
@@ -447,7 +498,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                 }
                 case ':': {
                     // user_email_header
-                    string_set_len(&ctx.user_apikey_header, STRLEN(HEAD_EMAIL));
+                    string_set_len(&ctx.user_email_header, STRLEN(HEAD_EMAIL));
                     string_concat_range(&ctx.user_email_header, s, e - 1);
                     string_make_str(&ctx.user_email_header);
                     fputss(s, e, fout);
@@ -458,7 +509,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     fputss(e, s, flog);
                     e = pass_value(s);
                     if (s == e) {
-                        string_set_len(&ctx.user_apikey_header, STRLEN(HEAD_EMAIL));
+                        string_set_len(&ctx.user_email_header, STRLEN(HEAD_EMAIL));
                         string_set_len(&ctx.user_apikey_header, STRLEN(HEAD_APIKEY));
                         s = pass_line(e);
                         fputss(e, s, fout);
@@ -468,7 +519,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     }
                     string_set_len(&ctx.user_apikey_header, STRLEN(HEAD_APIKEY));
                     string_concat_range(&ctx.user_apikey_header, s, e);
-                    string_make_str(&ctx.user_email_header);
+                    string_make_str(&ctx.user_apikey_header);
                     fputss(s, e, fout);
                     fputss(s, e, flog);
                     // tails
@@ -536,6 +587,8 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                         break;
                     }
                     string_copy_range(&ctx.record_type, s, e);
+                    string_fwrite(&ctx.record_type, fout);
+                    string_fwrite(&ctx.record_type, flog);
                     // name
                     s = pass_space(e);
                     fputss(e, s, fout);
@@ -549,16 +602,21 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                         break;
                     }
                     string_copy_range(&ctx.record_name, s, e);
+                    string_fwrite(&ctx.record_name, fout);
+                    string_fwrite(&ctx.record_name, flog);
+                    // content
+                    string_clear(&ctx.record_content);
                     // id
                     bool force_update, may_expired;
                     s = pass_space(e);
                     fputss(e, s, fout);
                     fputss(e, s, flog);
+                    fflush(flog);
                     e = pass_value(s);
                     if (s == e) {
                         force_update = true;
                         may_expired = false;
-                        cfddns_get_record_id(&ctx, &ctx.record_id);
+                        cfddns_get_record_id(&ctx, &ctx.record_id, &ctx.record_content);
                     } else if (e[-1] == '!') {
                         force_update = true;
                         may_expired = true;
@@ -569,17 +627,16 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                         string_copy_range(&ctx.record_id, s, e);
                     }
                     // do update
-                    fflush(flog);
                     bool success;
                     if (!ctx.record_id.len) {
                         success = false;
                     } else if (!force_update && !var->changed) {
                         success = true;
-                    } else if (cfddns_update_record(&ctx, &var->value)) {
+                    } else if (string_compare(&ctx.record_content, &var->value) || cfddns_update_record(&ctx, &var->value)) {
                         success = true;
                     } else if (may_expired) {
-                        cfddns_get_record_id(&ctx, &ctx.record_id);
-                        success = cfddns_update_record(&ctx, &var->value);
+                        cfddns_get_record_id(&ctx, &ctx.record_id, &ctx.record_content);
+                        success = string_compare(&ctx.record_content, &var->value) || cfddns_update_record(&ctx, &var->value);
                     } else {
                         success = false;
                     }
@@ -614,7 +671,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
 }
 
 int main(int argc, char *argv[]) {
-    for (char *i = argv[1], *s = i;;) {
+    for (char *i = argv[0], *s = i;;) {
         if (*i) {
             if (*i != '/') ++i; else s = ++i;
         } else {
@@ -622,15 +679,36 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
-    FILE *fp;
     if (argc < 2) {
-        fp = stdin;
-    } else {
-        fp = fopen(argv[1], "r");
-        if (!fp) {
-            perror(BASENAME);
-            return 1;
-        }
+        fputs("Usage: ", stderr);
+        fputs(BASENAME, stderr);
+        fputs(" [config_file]\n", stderr);
+        return 1;
     }
-    return cfddns_main(fp, stdout, stderr);
+    FILE *fin = fopen(argv[1], "r");
+    if (!fin) {
+        perror(BASENAME);
+        return 1;
+    }
+    FILE *tmp = tmpfile();
+    if (!tmp) {
+        perror(BASENAME);
+        fclose(fin);
+        return 1;
+    }
+    cfddns_main(fin, tmp, stdout);
+    fclose(fin);
+    FILE *fout = fopen(argv[1], "wb");
+    if (!fout) {
+        perror(BASENAME);
+        fclose(tmp);
+        return 1;
+    }
+    rewind(tmp); 
+    int ch;
+    while ((ch = fgetc(tmp)) != EOF) {
+        fputc(ch, fout);
+    }
+    fclose(fout);
+    return 0;
 }
