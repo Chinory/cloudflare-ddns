@@ -199,12 +199,12 @@ static void curl_string_getln(const char *url, string *str) {
     curl_easy_cleanup(curl);
 }
 
-struct variable {
+typedef struct variable {
     struct variable *prev;
     string key;
     string value;
     bool changed;
-};
+} variable;
 
 struct context {
     string user_email_header;
@@ -215,7 +215,7 @@ struct context {
     string record_type;
     string record_name;
     string record_content;
-    struct variable *vars;
+    variable *vars;
 };
 
 static void
@@ -234,7 +234,7 @@ cfddns_context_init(struct context *ctx) {
 static void
 cfddns_context_cleanup(struct context *ctx) {
     while (ctx->vars) {
-        struct variable *prev = ctx->vars->prev;
+        variable *prev = ctx->vars->prev;
         free(ctx->vars);
         ctx->vars = prev;
     }
@@ -396,7 +396,22 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
         } else {
             switch (e[-1]) {
                 case '?': {
-                    struct variable *var = malloc(sizeof(struct variable));
+                    variable *var = ctx.vars;
+                    for (size_t n = e - 1 - s; var; var = var->prev) {
+                        if (string_compare_slice(&var->key, s, n)) {
+                            break;
+                        }
+                    }
+                    if (var) {
+                        fputss(s, e, fout);
+                        fputss(s, e, flog);
+                        s = pass_line(e);
+                        fputss(e, s, fout);
+                        fputss(e, s, flog);
+                        fputs(" #already_binded", flog);
+                        break;
+                    }
+                    var = malloc(sizeof(variable));
                     if (!var) {
                         fputss(s, e, fout);
                         fputss(s, e, flog);
@@ -534,7 +549,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                 }
                 default: {
                     // var_key
-                    struct variable *var = ctx.vars;
+                    variable *var = ctx.vars;
                     size_t var_key_len = e - s;
                     fwrite(s, 1, var_key_len, fout);
                     fwrite(s, 1, var_key_len, flog);
