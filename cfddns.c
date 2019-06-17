@@ -47,9 +47,9 @@ static size_t fputss(const char *start, const char *end, FILE *file) {
     return fwrite(start, sizeof(char), end - start, file);
 }
 
-static void fputcn(char c, size_t n, FILE *file) {
-    for (; n; --n) fputc(c, file);
-}
+// static void fputcn(char c, size_t n, FILE *file) {
+//     for (; n; --n) fputc(c, file);
+// }
 
 char BASENAME[NAME_MAX + 1];
 
@@ -509,7 +509,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     string_make_str(&ctx.user_apikey_header);
                     fputss(s, e, fout);
                     // fputss(s, e, flog);
-                    fputcn(' ', e - s, flog);
+                    // fputcn(' ', e - s, flog);
                     // tails
                     s = pass_line(e);
                     fputss(e, s, fout);
@@ -540,7 +540,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     }
                     string_fwrite(&ctx.zone_id, fout);
                     // string_fwrite(&ctx.zone_id, flog);
-                    fputcn(' ', ctx.zone_id.len, flog);
+                    // fputcn(' ', ctx.zone_id.len, flog);
                     // tails
                     s = pass_line(e);
                     fputss(e, s, fout);
@@ -641,7 +641,7 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                     }
                     string_fwrite(&ctx.record_id, fout);
                     // string_fwrite(&ctx.record_id, flog);
-                    fputcn(' ', ctx.record_id.len, flog);
+                    // fputcn(' ', ctx.record_id.len, flog);
                     // tails
                     if (!success) {
                         fputc('!', fout);
