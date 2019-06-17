@@ -247,7 +247,7 @@ cfddns_get_zone_id(const struct context *ctx, string *zone_id) {
 
     CURL *curl = curl_easy_init();
     if (!curl) return;
-    
+
     lstring url;
     lstring_clear(&url);
     lstring_concat_str(&url, URL_BASE);
@@ -296,7 +296,7 @@ cfddns_get_record_id(const struct context *ctx, string *record_id, string *recor
     lstring_concat_string(&url, &ctx->record_type);
     lstring_concat_str(&url, "&name=");
     if (ctx->record_name.len != 1 || ctx->record_name.data[0] != '@') {
-        lstring_concat_string(&url, &ctx->record_name);    
+        lstring_concat_string(&url, &ctx->record_name);
         lstring_concat_char(&url, '.');
     }
     lstring_concat_string(&url, &ctx->zone_name);
@@ -361,7 +361,7 @@ cfddns_update_record(const struct context *ctx, const string *record_content) {
     headers = curl_slist_append(headers, ctx->user_email_header.data);
     headers = curl_slist_append(headers, ctx->user_apikey_header.data);
     headers = curl_slist_append(headers, "Content-Type: application/json");
-    
+
     lstring response;
     lstring_clear(&response);
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
@@ -610,11 +610,13 @@ static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
                         success = false;
                     } else if (!force_update && !var->changed) {
                         success = true;
-                    } else if (string_compare(&ctx.record_content, &var->value) || cfddns_update_record(&ctx, &var->value)) {
+                    } else if (string_compare(&ctx.record_content, &var->value) ||
+                               cfddns_update_record(&ctx, &var->value)) {
                         success = true;
                     } else if (may_expired) {
                         cfddns_get_record_id(&ctx, &ctx.record_id, &ctx.record_content);
-                        success = string_compare(&ctx.record_content, &var->value) || cfddns_update_record(&ctx, &var->value);
+                        success = string_compare(&ctx.record_content, &var->value) ||
+                                  cfddns_update_record(&ctx, &var->value);
                     } else {
                         success = false;
                     }
@@ -683,7 +685,7 @@ int main(int argc, char *argv[]) {
         fclose(tmp);
         return 1;
     }
-    rewind(tmp); 
+    rewind(tmp);
     int ch;
     while ((ch = fgetc(tmp)) != EOF) {
         fputc(ch, fout);
