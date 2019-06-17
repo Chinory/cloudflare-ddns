@@ -1,2 +1,7 @@
 .idea/
+.vscode/
 cmake-*/
+CMakeFiles/
+cfddns
+CMakeCache.txt
+*.o
