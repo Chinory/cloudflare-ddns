@@ -215,6 +215,7 @@ struct cfddns_context {
     string record_name;
     string record_content;
     variable *vars;
+    char line[LINE_MAX];
 } cfddns;
 
 static void
@@ -239,6 +240,15 @@ cfddns_cleanup() {
     }
 }
 
+static struct curl_slist *
+cfddns_make_headers() {
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, cfddns.user_email_header.data);
+    headers = curl_slist_append(headers, cfddns.user_apikey_header.data);
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    return headers;
+}
+
 static void
 cfddns_get_zone_id(string *zone_id) {
     string_clear(zone_id);
@@ -253,10 +263,8 @@ cfddns_get_zone_id(string *zone_id) {
     buffer_concat_string(&url, &cfddns.zone_name);
     buffer_c_str(&url);
 
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, cfddns.user_email_header.data);
-    headers = curl_slist_append(headers, cfddns.user_apikey_header.data);
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+    struct curl_slist *headers;
+    headers = cfddns_make_headers();
 
     buffer response;
     buffer_clear(&response);
@@ -300,10 +308,8 @@ cfddns_get_record_id(string *record_id, string *record_content) {
     buffer_concat_string(&url, &cfddns.zone_name);
     buffer_c_str(&url);
 
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, cfddns.user_email_header.data);
-    headers = curl_slist_append(headers, cfddns.user_apikey_header.data);
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+    struct curl_slist *headers;
+    headers = cfddns_make_headers();
 
     buffer response;
     buffer_clear(&response);
@@ -355,10 +361,8 @@ cfddns_update_record(const string *record_content) {
     buffer_concat_str(&request, "\"}");
     buffer_c_str(&request);
 
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(headers, cfddns.user_email_header.data);
-    headers = curl_slist_append(headers, cfddns.user_apikey_header.data);
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+    struct curl_slist *headers;
+    headers = cfddns_make_headers();
 
     buffer response;
     buffer_clear(&response);
@@ -377,11 +381,11 @@ cfddns_update_record(const string *record_content) {
     return strstr(response.data, "\"success\":true");
 }
 
-static int cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
+static int
+cfddns_main(FILE *fin, FILE *fout, FILE *flog) {
     cfddns_init();
-    char line[LINE_MAX];
-    while (fgets(line, LINE_MAX, fin)) {
-        char *s, *e = line;
+    while (fgets(cfddns.line, LINE_MAX, fin)) {
+        char *s, *e = cfddns.line;
         s = pass_space(e);
         fputss(e, s, fout);
         fputss(e, s, flog);
