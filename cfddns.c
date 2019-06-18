@@ -393,14 +393,14 @@ cfddns_proc_line_var(char *s, char *e) {
         if (string_equals_slice(&var->key, s, n - 1)) {
             fwrite(s, sizeof(char), n, cfddns.fout);
             fwrite(s, sizeof(char), n, cfddns.flog);
-            return cfddns_line_done(e, " #already_binded");
+            return cfddns_line_done(e, " #var_already_binded");
         }
     }
     var = malloc(sizeof(variable));
     if (var == NULL) {
         fwrite(s, sizeof(char), n, cfddns.fout);
         fwrite(s, sizeof(char), n, cfddns.flog);
-        return cfddns_line_done(e, " #need_memory");
+        return cfddns_line_done(e, " #var_need_memory");
     }
     string_copy_slice(&var->key, s, n - 1);
     fwrite(s, sizeof(char), n, cfddns.fout);
@@ -492,11 +492,11 @@ cfddns_proc_line_zone(char *s, char *e) {
     } else {
         string_copy_slice(&cfddns.zone_id, s, n);
     }
-    fwrite(s, sizeof(char), n, cfddns.fout);
+    string_fwrite(&cfddns.zone_id, cfddns.fout);
     #ifdef LOG_SECRETS
-    fwrite(s, sizeof(char), n, cfddns.flog);
+    string_fwrite(&cfddns.zone_id, cfddns.flog);
     #endif
-    return cfddns_line_done(e, n ? "" : " #got_id");
+    return cfddns_line_done(e, n ? "" : " #got_zone_id");
 }
 
 static void
@@ -528,7 +528,7 @@ cfddns_proc_line_record(char *s, char *e) {
     variable *var = cfddns.vars;
     for (;; var = var->prev) {
         if (var == NULL) {
-            return cfddns_line_done(e, " #var_undefined");
+            return cfddns_line_done(e, " #var_not_bind");
         } else if (string_equals_slice(&var->key, s, n)) {
             break;
         }
