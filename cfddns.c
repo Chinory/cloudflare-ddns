@@ -617,7 +617,7 @@ cfddns_proc() {
 void usage(FILE *file) {
     fputs("Usage: ", file);
     fputs(BASENAME, file);
-    fputs(" [config_file]\nSee <https://github.com/chinory/cloudflare-ddns-client>\n", file);
+    fputs(" [config_file]\n", file);
 }
 
 int main(int argc, char *argv[]) {
