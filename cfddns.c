@@ -212,6 +212,7 @@ struct cfddns_context {
 
 static void
 cfddns_init() {
+    cfddns.vars = NULL;
     string_copy_str(&cfddns.user_email_header, HEAD_EMAIL);
     string_copy_str(&cfddns.user_apikey_header, HEAD_APIKEY);
     string_clear(&cfddns.zone_id);
@@ -220,7 +221,6 @@ cfddns_init() {
     string_clear(&cfddns.record_type);
     string_clear(&cfddns.record_name);
     string_clear(&cfddns.record_content);
-    cfddns.vars = NULL;
 }
 
 static void
@@ -255,24 +255,22 @@ cfddns_get_zone_id(string *zone_id) {
     buffer_concat_string(&url, &cfddns.zone_name);
     buffer_c_str(&url);
 
-    struct curl_slist *headers = cfddns_make_headers();
-
     buffer response;
     buffer_clear(&response);
+    struct curl_slist *headers = cfddns_make_headers();
     curl_easy_setopt(curl, CURLOPT_URL, url.data);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, buffer_from_curl_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
     curl_easy_cleanup(curl);
+    curl_slist_free_all(headers);
     buffer_c_str(&response);
 
-    curl_slist_free_all(headers);
+    char *s, *e;
 
-    char *s = strstr(response.data, "\"result\":[{\"id\":\"");
-    if (!s) return;
-    char *e = strchr(s += STRLEN("\"result\":[{\"id\":\""), '"');
-    if (!e) return;
+    if (!(s = strstr(response.data, "\"result\":[{\"id\":\""))) return;
+    if (!(e = strchr(s += STRLEN("\"result\":[{\"id\":\""), '"'))) return;
     string_copy_range(zone_id, s, e);
 }
 
@@ -299,19 +297,17 @@ cfddns_get_record_id(string *record_id, string *record_content) {
     buffer_concat_string(&url, &cfddns.zone_name);
     buffer_c_str(&url);
 
-    struct curl_slist *headers = cfddns_make_headers();
-
     buffer response;
     buffer_clear(&response);
+    struct curl_slist *headers = cfddns_make_headers();
     curl_easy_setopt(curl, CURLOPT_URL, url.data);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, buffer_from_curl_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
     curl_easy_cleanup(curl);
-    buffer_c_str(&response);
-
     curl_slist_free_all(headers);
+    buffer_c_str(&response);
 
     char *s, *e;
 
@@ -351,11 +347,9 @@ cfddns_update_record(const string *record_content) {
     buffer_concat_str(&request, "\"}");
     buffer_c_str(&request);
 
-    struct curl_slist *headers;
-    headers = cfddns_make_headers();
-
     buffer response;
     buffer_clear(&response);
+    struct curl_slist *headers = cfddns_make_headers();
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
     curl_easy_setopt(curl, CURLOPT_URL, url.data);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -364,9 +358,8 @@ cfddns_update_record(const string *record_content) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_perform(curl);
     curl_easy_cleanup(curl);
-    buffer_c_str(&response);
-
     curl_slist_free_all(headers);
+    buffer_c_str(&response);
 
     return strstr(response.data, "\"success\":true");
 }
@@ -636,8 +629,6 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
-    // printf("%lu\n", sizeof(struct cfddns_context));
-    // return 0;
     if (argc < 2) {
         usage(stderr);
         return 1;
