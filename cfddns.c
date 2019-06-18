@@ -613,8 +613,7 @@ cfddns_proc() {
         }
     }
 }
-
-void usage(FILE *file) {
+static void usage(FILE *file) {
     fputs("Usage: ", file);
     fputs(BASENAME, file);
     fputs(" [config_file]\n", file);
@@ -625,14 +624,14 @@ int main(int argc, char *argv[]) {
         if (*i) {
             if (*i != '/') ++i; else s = ++i;
         } else {
-            memcpy((void *) BASENAME, s, i - s + 1);
+            memcpy(BASENAME, s, i - s + 1);
             break;
         }
     }
     if (argc < 2) {
         usage(stderr);
         return 1;
-    } else if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
+    } else if (!strcmp(argv[1], "-h")) {
         usage(stdout);
         return 0;
     }
