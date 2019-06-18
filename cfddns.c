@@ -528,7 +528,7 @@ cfddns_proc_line_record(char *s, char *e) {
     variable *var = cfddns.vars;
     for (;; var = var->prev) {
         if (var == NULL) {
-            return cfddns_line_done(e, " #var_not_bind");
+            return cfddns_line_done(e, " #var_undefined");
         } else if (string_equals_slice(&var->key, s, n)) {
             break;
         }
