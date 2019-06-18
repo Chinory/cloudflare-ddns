@@ -1,0 +1,8 @@
+[Unit]
+Description=Cloudflare DDNS Client
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/cfddns /etc/cfddns.conf
