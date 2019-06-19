@@ -64,27 +64,27 @@ static inline void string_c_str(string *str) {
     str->data[str->len] = '\0';
 }
 
-static inline bool string_equals_slice(const string *str, const char *s, size_t n) {
+static inline bool string_equals(const string *str, const char *s, size_t n) {
     return str->len == n && !memcmp(str->data, s, n);
 }
 
 static inline bool string_equals_string(const string *str, const string *_str) {
-    return string_equals_slice(str, _str->data, _str->len);
+    return string_equals(str, _str->data, _str->len);
 }
 
-static inline void string_copy_slice(string *str, const char *s, size_t n) {
+static inline void string_copy(string *str, const char *s, size_t n) {
     memcpy(str->data, s, str->len = n < STR_MAX ? n : STR_MAX);
 }
 
 static inline void string_copy_str(string *str, const char *s) {
-    string_copy_slice(str, s, strlen(s));
+    string_copy(str, s, strlen(s));
 }
 
 static inline void string_copy_range(string *str, const char *s, const char *e) {
-    string_copy_slice(str, s, e - s);
+    string_copy(str, s, e - s);
 }
 
-static inline void string_concat_slice(string *str, const char *s, size_t n) {
+static inline void string_concat(string *str, const char *s, size_t n) {
     if (n > STR_MAX - str->len)
         n = STR_MAX - str->len;
     memcpy(str->data + str->len, s, n);
@@ -92,7 +92,7 @@ static inline void string_concat_slice(string *str, const char *s, size_t n) {
 }
 
 static inline void string_concat_range(string *str, const char *s, const char *e) {
-    string_concat_slice(str, s, e - s);
+    string_concat(str, s, e - s);
 }
 
 static inline void string_fwrite(const string *str, FILE *file) {
@@ -149,7 +149,7 @@ static inline void buffer_concat_char(buffer *buf, char c) {
     }
 }
 
-static inline void buffer_concat_slice(buffer *buf, const char *s, size_t n) {
+static inline void buffer_concat(buffer *buf, const char *s, size_t n) {
     if (n > BUF_MAX - buf->len)
         n = BUF_MAX - buf->len;
     memcpy(buf->data + buf->len, s, n);
@@ -157,15 +157,15 @@ static inline void buffer_concat_slice(buffer *buf, const char *s, size_t n) {
 }
 
 static inline void buffer_concat_range(buffer *buf, const char *s, const char *e) {
-    buffer_concat_slice(buf, s, e - s);
+    buffer_concat(buf, s, e - s);
 }
 
 static inline void buffer_concat_str(buffer *buf, const char *s) {
-    buffer_concat_slice(buf, s, strlen(s));
+    buffer_concat(buf, s, strlen(s));
 }
 
 static inline void buffer_concat_string(buffer *buf, const string *str) {
-    buffer_concat_slice(buf, str->data, str->len);
+    buffer_concat(buf, str->data, str->len);
 }
 
 static size_t
@@ -390,7 +390,7 @@ cfddns_proc_line_var(char *s, char *e) {
     size_t n = e - s;
     variable *var = cfddns.vars;
     for (; var != NULL; var = var->prev) {
-        if (string_equals_slice(&var->key, s, n - 1)) {
+        if (string_equals(&var->key, s, n - 1)) {
             fwrite(s, sizeof(char), n, cfddns.fout);
             fwrite(s, sizeof(char), n, cfddns.flog);
             return cfddns_pass_line(e, " #var_already_binded");
@@ -402,7 +402,7 @@ cfddns_proc_line_var(char *s, char *e) {
         fwrite(s, sizeof(char), n, cfddns.flog);
         return cfddns_pass_line(e, " #var_need_memory");
     }
-    string_copy_slice(&var->key, s, n - 1);
+    string_copy(&var->key, s, n - 1);
     fwrite(s, sizeof(char), n, cfddns.fout);
     fwrite(s, sizeof(char), n, cfddns.flog);
     // url
@@ -434,7 +434,7 @@ cfddns_proc_line_var(char *s, char *e) {
         fputc(' ', cfddns.fout);
         fputc(' ', cfddns.flog);
     } else {
-        var->changed = !string_equals_slice(&var->value, s, n);
+        var->changed = !string_equals(&var->value, s, n);
     }
     // value_now
     string_fwrite(&var->value, cfddns.fout);
@@ -450,7 +450,7 @@ cfddns_proc_line_user(char *s, char *e) {
     // user_email
     size_t n = e - s;
     string_setlen(&cfddns.user_email_header, STRLEN(HEAD_EMAIL));
-    string_concat_slice(&cfddns.user_email_header, s, n - 1);
+    string_concat(&cfddns.user_email_header, s, n - 1);
     string_c_str(&cfddns.user_email_header);
     fwrite(s, sizeof(char), n, cfddns.fout);
     fwrite(s, sizeof(char), n, cfddns.flog);
@@ -464,7 +464,7 @@ cfddns_proc_line_user(char *s, char *e) {
         return cfddns_pass_line(e, " #need_apikey");
     }
     string_setlen(&cfddns.user_apikey_header, STRLEN(HEAD_APIKEY));
-    string_concat_slice(&cfddns.user_apikey_header, s, n);
+    string_concat(&cfddns.user_apikey_header, s, n);
     string_c_str(&cfddns.user_apikey_header);
     fwrite(s, sizeof(char), n, cfddns.fout);
     #ifdef LOG_SECRETS
@@ -477,7 +477,7 @@ static void
 cfddns_proc_line_zone(char *s, char *e) {
     // zone_name
     size_t n = e - s;
-    string_copy_slice(&cfddns.zone_name, s, n - 1);
+    string_copy(&cfddns.zone_name, s, n - 1);
     fwrite(s, sizeof(char), n, cfddns.fout);
     fwrite(s, sizeof(char), n, cfddns.flog);
     // zone_id
@@ -490,20 +490,20 @@ cfddns_proc_line_zone(char *s, char *e) {
         fflush(cfddns.flog);
         cfddns_get_zone_id(&cfddns.zone_id);
     } else {
-        string_copy_slice(&cfddns.zone_id, s, n);
+        string_copy(&cfddns.zone_id, s, n);
     }
     string_fwrite(&cfddns.zone_id, cfddns.fout);
     #ifdef LOG_SECRETS
     string_fwrite(&cfddns.zone_id, cfddns.flog);
     #endif
-    return cfddns_pass_line(e, n ? "" : " #get_zone_id");
+    return cfddns_pass_line(e, n ? "" : " #got_zone_id");
 }
 
 static void
 cfddns_proc_line_record(char *s, char *e) {
     // type
     size_t n = e - s;
-    string_copy_slice(&cfddns.record_type, s, n);
+    string_copy(&cfddns.record_type, s, n);
     fwrite(s, sizeof(char), n, cfddns.fout);
     fwrite(s, sizeof(char), n, cfddns.flog);
     // name
@@ -513,7 +513,7 @@ cfddns_proc_line_record(char *s, char *e) {
     if (!n) {
         return cfddns_pass_line(e, " #need_name");
     }
-    string_copy_slice(&cfddns.record_name, s, n);
+    string_copy(&cfddns.record_name, s, n);
     fwrite(s, sizeof(char), n, cfddns.fout);
     fwrite(s, sizeof(char), n, cfddns.flog);
     // var_key => var
@@ -529,7 +529,7 @@ cfddns_proc_line_record(char *s, char *e) {
     for (;; var = var->prev) {
         if (var == NULL) {
             return cfddns_pass_line(e, " #var_undefined");
-        } else if (string_equals_slice(&var->key, s, n)) {
+        } else if (string_equals(&var->key, s, n)) {
             break;
         }
     }
@@ -544,11 +544,11 @@ cfddns_proc_line_record(char *s, char *e) {
     if (n == 0 || (n == 1 && e[-1] == '!')) {
         success = false;
     } else if (e[-1] == '!') {
-        string_copy_slice(&cfddns.record_id, s, n - 1);
+        string_copy(&cfddns.record_id, s, n - 1);
         success = cfddns_update_record(&var->value);
         if (success) log = " #updated";
     } else {
-        string_copy_slice(&cfddns.record_id, s, n);
+        string_copy(&cfddns.record_id, s, n);
         success = !var->changed;
         if (success) log = " #var_not_changed";
     }
