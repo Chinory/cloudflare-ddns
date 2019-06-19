@@ -613,6 +613,7 @@ cfddns_proc() {
         }
     }
 }
+
 static void usage(FILE *file) {
     fputs("Usage: ", file);
     fputs(BASENAME, file);
@@ -634,6 +635,9 @@ int main(int argc, char *argv[]) {
     } else if (!strcmp(argv[1], "-h")) {
         usage(stdout);
         return 0;
+    } else if (!strcmp(argv[1], "-v")) {
+        fputs("cfddns v0.3.2\n", stdout);
+        return 0;
     }
     cfddns.fin = fopen(argv[1], "r");
     if (!cfddns.fin) {
@@ -647,9 +651,11 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     cfddns.flog = stdout;
+    curl_global_init(CURL_GLOBAL_ALL);
     cfddns_init();
     cfddns_proc();
     cfddns_cleanup();
+    curl_global_cleanup();
     fclose(cfddns.fin);
     cfddns.fin = cfddns.fout;
     cfddns.fout = fopen(argv[1], "w");
