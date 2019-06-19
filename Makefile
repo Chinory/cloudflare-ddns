@@ -15,6 +15,7 @@ all: $(PROG)
 
 install: $(PROG)
 	install -D -m 755 $(PROG) $(bindir)/$(PROG)
+	-cp -n $(PROG).conf $(cfgdir)/$(PROG).conf && chmod 600 $(cfgdir)/$(PROG).conf
 
 uninstall:
 	-rm -f $(bindir)/$(PROG)
@@ -23,7 +24,7 @@ install-systemd: $(PROG)
 	install -D -m 755 $(PROG) $(bindir)/$(PROG)
 	install -D -m 644 $(PROG).service $(srvdir)/$(PROG).service
 	install -D -m 644 $(PROG).timer $(srvdir)/$(PROG).timer
-	install -D -m 600 $(PROG).conf $(cfgdir)/$(PROG).conf
+	-cp -n $(PROG).conf $(cfgdir)/$(PROG).conf && chmod 600 $(cfgdir)/$(PROG).conf
 	systemctl daemon-reload
 	systemctl enable $(PROG).timer
 
