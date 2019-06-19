@@ -76,9 +76,7 @@ static inline void string_copy(string *str, const char *s, size_t n) {
     memcpy(str->data, s, str->len = n < STR_MAX ? n : STR_MAX);
 }
 
-static inline void string_copy_str(string *str, const char *s) {
-    string_copy(str, s, strlen(s));
-}
+#define string_copy_STR(str,S) string_copy(str, S, STRLEN(S))
 
 static inline void string_copy_range(string *str, const char *s, const char *e) {
     string_copy(str, s, e - s);
@@ -143,7 +141,7 @@ static inline void buffer_c_str(buffer *buf) {
     buf->data[buf->len] = '\0';
 }
 
-static inline void buffer_concat_char(buffer *buf, char c) {
+static inline void buffer_push(buffer *buf, char c) {
     if (buf->len < BUF_MAX) {
         buf->data[buf->len++] = c;
     }
@@ -156,12 +154,10 @@ static inline void buffer_concat(buffer *buf, const char *s, size_t n) {
     buf->len += n;
 }
 
+#define buffer_concat_STR(buf,S) buffer_concat(buf, S, STRLEN(S))
+
 static inline void buffer_concat_range(buffer *buf, const char *s, const char *e) {
     buffer_concat(buf, s, e - s);
-}
-
-static inline void buffer_concat_str(buffer *buf, const char *s) {
-    buffer_concat(buf, s, strlen(s));
 }
 
 static inline void buffer_concat_string(buffer *buf, const string *str) {
@@ -213,8 +209,8 @@ struct cfddns_context {
 static void
 cfddns_init() {
     cfddns.vars = NULL;
-    string_copy_str(&cfddns.user_email_header, HEAD_EMAIL);
-    string_copy_str(&cfddns.user_apikey_header, HEAD_APIKEY);
+    string_copy_STR(&cfddns.user_email_header, HEAD_EMAIL);
+    string_copy_STR(&cfddns.user_apikey_header, HEAD_APIKEY);
     string_clear(&cfddns.zone_id);
     string_clear(&cfddns.zone_name);
     string_clear(&cfddns.record_id);
@@ -250,8 +246,8 @@ cfddns_get_zone_id(string *zone_id) {
 
     buffer url;
     buffer_clear(&url);
-    buffer_concat_str(&url, URL_BASE);
-    buffer_concat_str(&url, "/zones?name=");
+    buffer_concat_STR(&url, URL_BASE);
+    buffer_concat_STR(&url, "/zones?name=");
     buffer_concat_string(&url, &cfddns.zone_name);
     buffer_c_str(&url);
 
@@ -284,15 +280,15 @@ cfddns_get_record_id(string *record_id, string *record_content) {
 
     buffer url;
     buffer_clear(&url);
-    buffer_concat_str(&url, URL_BASE);
-    buffer_concat_str(&url, "/zones/");
+    buffer_concat_STR(&url, URL_BASE);
+    buffer_concat_STR(&url, "/zones/");
     buffer_concat_string(&url, &cfddns.zone_id);
-    buffer_concat_str(&url, "/dns_records?type=");
+    buffer_concat_STR(&url, "/dns_records?type=");
     buffer_concat_string(&url, &cfddns.record_type);
-    buffer_concat_str(&url, "&name=");
+    buffer_concat_STR(&url, "&name=");
     if (cfddns.record_name.len != 1 || cfddns.record_name.data[0] != '@') {
         buffer_concat_string(&url, &cfddns.record_name);
-        buffer_concat_char(&url, '.');
+        buffer_push(&url, '.');
     }
     buffer_concat_string(&url, &cfddns.zone_name);
     buffer_c_str(&url);
@@ -329,22 +325,22 @@ cfddns_update_record(const string *record_content) {
 
     buffer url;
     buffer_clear(&url);
-    buffer_concat_str(&url, URL_BASE);
-    buffer_concat_str(&url, "/zones/");
+    buffer_concat_STR(&url, URL_BASE);
+    buffer_concat_STR(&url, "/zones/");
     buffer_concat_string(&url, &cfddns.zone_id);
-    buffer_concat_str(&url, "/dns_records/");
+    buffer_concat_STR(&url, "/dns_records/");
     buffer_concat_string(&url, &cfddns.record_id);
     buffer_c_str(&url);
 
     buffer request;
     buffer_clear(&request);
-    buffer_concat_str(&request, "{\"type\":\"");
+    buffer_concat_STR(&request, "{\"type\":\"");
     buffer_concat_string(&request, &cfddns.record_type);
-    buffer_concat_str(&request, "\",\"name\":\"");
+    buffer_concat_STR(&request, "\",\"name\":\"");
     buffer_concat_string(&request, &cfddns.record_name);
-    buffer_concat_str(&request, "\",\"content\":\"");
+    buffer_concat_STR(&request, "\",\"content\":\"");
     buffer_concat_string(&request, record_content);
-    buffer_concat_str(&request, "\"}");
+    buffer_concat_STR(&request, "\"}");
     buffer_c_str(&request);
 
     buffer response;
