@@ -11,20 +11,20 @@
 
 // #define LOG_SECRETS // show apikey, zone_id, record_id in stdout
 
-static inline bool is_value(char c) {
-    return c && c != '\n' && c != ' ' && c != '\t' && c != '#';
+static inline bool is_line(char c) {
+    return c != '\0' && c != '\n';
 }
 
 static inline bool is_space(char c) {
     return c == ' ' || c == '\t';
 }
 
-static inline bool is_line(char c) {
-    return c != '\0' && c != '\n';
+static inline bool is_value(char c) {
+    return is_line(c) && !is_space(c) && c != '#';
 }
 
-static inline char *pass_value(char *i) {
-    while (is_value(*i)) ++i;
+static inline char *pass_line(char *i) {
+    while (is_line(*i)) ++i;
     return i;
 }
 
@@ -33,8 +33,8 @@ static inline char *pass_space(char *i) {
     return i;
 }
 
-static inline char *pass_line(char *i) {
-    while (is_line(*i)) ++i;
+static inline char *pass_value(char *i) {
+    while (is_value(*i)) ++i;
     return i;
 }
 
