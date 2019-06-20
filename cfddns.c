@@ -19,8 +19,8 @@ static inline bool is_space(char c) {
     return c == ' ' || c == '\t';
 }
 
-static inline bool is_end(char c) {
-    return c == '\0' || c == '\n';
+static inline bool is_line(char c) {
+    return c != '\0' && c != '\n';
 }
 
 static inline char *pass_value(char *i) {
@@ -34,7 +34,7 @@ static inline char *pass_space(char *i) {
 }
 
 static inline char *pass_line(char *i) {
-    while (!is_end(*i)) ++i;
+    while (is_line(*i)) ++i;
     return i;
 }
 
