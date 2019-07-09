@@ -4,6 +4,7 @@ Wants=network.target
 After=network.target
 
 [Timer]
+OnBootSec=1min
 OnUnitActiveSec=10min
 Unit=cfddns.service
 

@@ -632,7 +632,7 @@ int main(int argc, char *argv[]) {
         usage(stdout);
         return 0;
     } else if (!strcmp(argv[1], "-v")) {
-        fputs("cfddns v0.3.3\n", stdout);
+        fputs("cfddns v0.3.4\n", stdout);
         return 0;
     }
     cfddns.fin = fopen(argv[1], "r");
