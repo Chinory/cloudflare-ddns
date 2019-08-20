@@ -27,6 +27,7 @@ install-systemd: $(PROG)
 	-cp -n $(PROG).conf $(cfgdir)/$(PROG).conf && chmod 600 $(cfgdir)/$(PROG).conf
 	systemctl daemon-reload
 	systemctl enable $(PROG).timer
+	systemctl start $(PROG).timer
 
 uninstall-systemd: $(PROG)
 	-systemctl stop $(PROG).timer
